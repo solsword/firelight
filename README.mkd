@@ -1,0 +1,5 @@
+# Firelight
+
+A twitter bot for interactive storytelling on the web.
+
+Author: Peter Mawhorter (pmawhorter+gatherround@gmail.com)
