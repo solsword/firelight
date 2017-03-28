@@ -19,6 +19,12 @@ class TwitterAPI:
     self.api = tweepy.API(self.auth)
     self.db = persist.Storage()
 
+  def shutdown(self):
+    """
+    Shuts down the various connections.
+    """
+    self.db.disconnect()
+
   def validate(self, message):
     """
     Returns False if the given message isn't valid.
@@ -42,7 +48,6 @@ class TwitterAPI:
     """
     lpm = self.db.load_state("last_processed_mention")
     if lpm:
-      print("Filtering on lpm: '{}'".format(lpm))
       cursor = tweepy.Cursor(
         self.api.mentions_timeline,
         since_id=lpm

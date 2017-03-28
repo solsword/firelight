@@ -87,7 +87,7 @@ class Storage:
         .format(key)
       )
       return
-    cur.execute("UPDATE state SET ? = ?;", (key, value,))
+    cur.execute("UPDATE state SET {} = ?;".format(key), (value,))
     self.connection.commit()
 
   def load_state(self, key):
@@ -101,8 +101,49 @@ class Storage:
         .format(key)
       )
       return None
-    cur.execute("SELECT ? FROM state;", (key,))
+    cur.execute("SELECT {} FROM state;".format(key))
     row = cur.fetchone()
-    print("HZK", " | ".join("'" + str(val) + "'" for val in row))
-    value = row[0]
+    value = row[key]
     return value
+
+  def get_story_state(self, reader):
+    """
+    Creates a new story and stores it in the database.
+    """
+    cur = self.connection.cursor()
+    cur.execute(
+      "SELECT state FROM stories WHERE reader = ?;"
+      ("reader", "state", reader, initial_state)
+    )
+    row = cur.fetchone()
+    if not row:
+      # Create a new story for this reader and return the empty string
+      cur.execute(
+        "INSERT INTO stories(reader, state) values(?, ?);",
+        (reader, "")
+      )
+      self.connection.commit()
+      return ""
+    else:
+      return row["state"]
+
+  def update_story_state(self, reader, state):
+    cur = self.connection.cursor()
+    cur.execute(
+      "SELECT state FROM stories WHERE reader = ?;"
+      ("reader", "state", reader, initial_state)
+    )
+    row = cur.fetchone()
+    if not row:
+      # Create a new story for this reader
+      cur.execute(
+        "INSERT INTO stories(reader, state) values(?, ?);",
+        (reader, state)
+      )
+      self.connection.commit()
+    else:
+      cur.execute(
+        "UPDATE stories SET state = ? WHERE reader = ?;"
+        (state, reader)
+      )
+      self.connection.commit()
