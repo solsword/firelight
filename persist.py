@@ -7,6 +7,7 @@ Persistent storage for Firelight bot.
 import sqlite3
 import os
 import datetime
+import json
 
 import config
 
@@ -106,44 +107,61 @@ class Storage:
     value = row[key]
     return value
 
-  def get_story_state(self, reader):
+  def create_new_story(self, reader, story_name):
     """
-    Creates a new story and stores it in the database.
+    Creates a new story and stores it in the database, returning the story's ID.
     """
     cur = self.connection.cursor()
+    # Create a new story for this reader and return its ID.
     cur.execute(
-      "SELECT state FROM stories WHERE reader = ?;"
-      ("reader", "state", reader, initial_state)
+      (
+        "INSERT INTO stories(reader, state) values(?, ?);"
+        " SELECT last_insert_rowid()"
+      ),
+      (reader, json.dumps( {"name": story_name } ))
     )
+    self.connection.commit()
     row = cur.fetchone()
-    if not row:
-      # Create a new story for this reader and return the empty string
-      cur.execute(
-        "INSERT INTO stories(reader, state) values(?, ?);",
-        (reader, "")
-      )
-      self.connection.commit()
-      return ""
-    else:
-      return row["state"]
+    return row["id"]
 
-  def update_story_state(self, reader, state):
+  def get_story_state(self, story_id):
+    """
+    Fetches the story state for the given story_id. If no such state exists,
+    returns None. Story state is stored as JSON, so the object returned will be
+    a simple Python object.
+    """
     cur = self.connection.cursor()
     cur.execute(
-      "SELECT state FROM stories WHERE reader = ?;"
-      ("reader", "state", reader, initial_state)
+      "SELECT state FROM stories WHERE id = ?;"
+      (story_id,)
     )
     row = cur.fetchone()
     if not row:
-      # Create a new story for this reader
+      return None
+    else:
+      return json.loads(row["state"])
+
+  def update_story_state(self, story_id, state):
+    """
+    Updates the story state for the given story (the given object must be
+    dumpable to JSON). If there is no such state, a ValueError is raised.
+    """
+    cur = self.connection.cursor()
+    cur.execute(
+      "SELECT state FROM stories WHERE id = ?;"
+      (story_id,)
+    )
+    row = cur.fetchone()
+    if row:
       cur.execute(
-        "INSERT INTO stories(reader, state) values(?, ?);",
-        (reader, state)
+        "UPDATE stories SET state = ? WHERE id = ?;"
+        (json.dumps(state), story_id,)
       )
       self.connection.commit()
     else:
-      cur.execute(
-        "UPDATE stories SET state = ? WHERE reader = ?;"
-        (state, reader)
+      raise ValueError(
+        "Story {} does not exist for reader '{}'.".format(
+          story_id,
+          reader
+        )
       )
-      self.connection.commit()
