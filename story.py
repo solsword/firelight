@@ -6,6 +6,9 @@ with twitter directly.
 """
 
 import persist
+from state import StateChange
+
+from packable import pack, unpack
 
 class Telling:
   """
@@ -17,6 +20,28 @@ class Telling:
     self.decisions = []
     self.nodes = []
     self.story_id = persist.create_new_story(reader, start_node.name)
+
+  def current_content(self, highlight="bracket"):
+    """
+    Returns a string to display to the player for the current story node. The
+    'highlight' argument controls how options that occur within the content are
+    highlighted. Valid values include None (base content used as-is),
+    "bracket" (the default; square brackets will be added around option
+    words), and "link" (option words will be rendered as HTML anchor elements
+    that link to an anchor with their name.)
+    """
+    content = self.on_deck.content
+    if highlight == "bracket":
+      for opt in self.on_deck.successors:
+        content = re.sub(r"\b{}\b".format(opt), "[{}]".format(opt), content)
+    elif highlight == "link":
+      for opt in self.on_deck.successors:
+        content = re.sub(
+          r"\b{}\b".format(opt),
+          r'<a href="#{}">{}</a>'.format(opt, opt),
+          content
+        )
+    return content
 
   def advance(self, decision):
     """
@@ -32,7 +57,7 @@ class Telling:
           self.on_deck.name
         )
       )
-    state_changes, next_name = self.on_deck.successors[decision]
+    next_name, state_changes = self.on_deck.successors[decision]
 
     self.nodes.append(self.on_deck)
     self.decisions.append(decision)
@@ -50,17 +75,19 @@ class Telling:
     self.on_deck = NODE_REGISTRY[next_name]
 
     state = persist.get_story_state(self.story_id)
-    for sc in unpack(state_changes):
-      state = sc(state)
+    for sc in state_changes:
+      sc.apply(state)
 
     persist.update_story_state(self.story_id, state)
 
+
+# Holds all loaded StoryNode objects by name:
 NODE_REGISTRY = {}
 
 class StoryNode:
   """
   A single node in a story, with a name, content that can fit in a tweet, and a
-  dictionary of successors that maps option names to (state_update, next_name)
+  dictionary of successors that maps option names to (next_name, state_update)
   pairs. Note that node names must be globally unique.
   """
   def __init__(self, name, content, successors):
@@ -75,4 +102,56 @@ class StoryNode:
     return "[ {} ] {{ {} }}".format(
       self.content,
       ", ".join(key for key in self.successors)
+    )
+
+  def _pack_(self):
+    """
+    Returns a simplified version suitable for json.dumps. See packable.py.
+
+    Example:
+    ```
+    StoryNode(
+      "at_the_beach",
+      (
+        "You walk along the beach, watching seabirds dance with the waves. "
+        "The sea calls to you, but you should go home."
+      ),
+      {
+        "The sea": ( "wading_out", [ SetValue("mood", "desolate") ] ),
+        "go home": ( "back_home", [ SetValue("mood", "warm") ] )
+      }
+    )
+    ```
+    {
+      "name": "at_the_beach",
+      "content": "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
+      "successors": {
+        "The sea": [ "wading_out", [ "set mood \"desolate\"" ] ],
+        "go home": [ "back_home", [ "set mood \"warm\"" ] ]
+      }
+    }
+    ```
+    """
+    return {
+      "name": self.name,
+      "content": self.content,
+      "successors": pack(self.successors)
+    }
+
+  def _unpack_(obj):
+    """
+    Creates a StoryNode from a simple object (see packable.py).
+    """
+    successors = {}
+    for key in obj["successors"]:
+      nxt, changes = obj["successors"][key]
+      successors[key] = (
+        nxt,
+        [ unpack(sc, StateChange) for sc in changes ]
+      )
+
+    return StoryNode(
+      obj["name"],
+      obj["content"],
+      successors
     )
