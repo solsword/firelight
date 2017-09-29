@@ -15,6 +15,8 @@ class StateChange:
     for i in range(len(self.keys)):
       try:
         self.keys[i] = int(self.keys[i])
+      except:
+        pass
 
     self.value = value
 
@@ -24,6 +26,8 @@ class StateChange:
   def _pack_(self):
     """
     Returns a simplified object (see packable.py).
+
+    TODO: Examples here?
     """
     raise NotImplementedError("StateChange is an abstract class.")
 

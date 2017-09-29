@@ -1,0 +1,37 @@
+{
+  "name": "help",
+  "start": "help",
+  "nodes": {
+    "help": {
+      "name": "help",
+      "content":
+"Firelight is an interactive story engine. Options appear in brackets. Help topics: version links",
+      "successors": {
+        "version": "wading_out",
+        "links": "back_home"
+      }
+    },
+    "version": {
+      "name": "version",
+      "content": "This is Firelight version 0.1. back",
+      "successors": {
+        "back": "help"
+      }
+    },
+    "links": {
+      "name": "links",
+      "content": "Available options are written in brackets. Reply with an unambiguous prefix to make a decision. back"
+      "successors": {
+        "back": "help",
+        "brackets": "brackets"
+      }
+    },
+    "brackets": {
+      "name": "brackets",
+      "content": "Exactly. Good job following that link! back"
+      "successors": {
+        "back": "links"
+      }
+    }
+  }
+}

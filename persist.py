@@ -115,10 +115,10 @@ class Storage:
     # Create a new story for this reader and return its ID.
     cur.execute(
       (
-        "INSERT INTO stories(reader, state) values(?, ?);"
-        " SELECT last_insert_rowid()"
+        "INSERT INTO stories(reader, state) values(?, ?); "
+        "SELECT last_insert_rowid();"
       ),
-      (reader, json.dumps( {"name": story_name } ))
+      (reader, json.dumps( {"_name_": story_name, "_status_": "starting" } ))
     )
     self.connection.commit()
     row = cur.fetchone()
