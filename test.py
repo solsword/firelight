@@ -10,6 +10,7 @@ import traceback
 import utils
 
 from packable import pack, unpack
+from diffable import diff
 
 from story import StoryNode, Story
 from state import StateChange, SetValue, IncrementValue, InvertValue

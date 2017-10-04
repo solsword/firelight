@@ -10,7 +10,7 @@ from packable import pack, unpack
 
 class StateChange:
   def __init__(self, key, value=None):
-    self.keys = ".".split(key)
+    self.keys = key.split(".")
 
     for i in range(len(self.keys)):
       try:
@@ -22,6 +22,28 @@ class StateChange:
 
   def __str__(self):
     return "{} {} {}".format(type(self).__name__, self.key, self.value)
+
+  def __hash__(self):
+    return (
+      hash(self.keys) * 17
+    + hash(self.value)
+  ) * 31
+
+  def __eq__(self, other):
+    if not isinstance(other, self.__class__):
+      return False
+    if self.keys != other.keys:
+      return False
+    if self.value != other.value:
+      return False
+    return True
+
+  def _diff_(self, other):
+    if self.keys != other.keys:
+      return [ "keys ('{}' =/= '{}')".format(self.keys, other.keys) ]
+    if self.value != other.value:
+      return [ "values ('{}' =/= '{}')".format(self.value, other.value) ]
+    return []
 
   def _pack_(self):
     """

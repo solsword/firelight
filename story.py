@@ -9,6 +9,7 @@ import persist
 from state import StateChange
 
 from packable import pack, unpack
+from diffable import diff
 
 class Telling:
   """
@@ -121,6 +122,39 @@ class StoryNode:
       ", ".join(key for key in self.successors)
     )
 
+  def __hash__(self):
+    return (
+      hash(self.name) * 17
+    + hash(self.content) * 11
+    + sum(
+        (hash(k) + hash(v)) * (3+i)
+          for i, (k, v) in enumerate(self.successors.items())
+      )
+  )
+
+  def __eq__(self, other):
+    if not isinstance(other, StoryNode):
+      return False
+    if self.name != other.name:
+      return False
+    if self.content != other.content:
+      return False
+    if self.successors != other.successors:
+      return False
+    return True
+
+  def _diff_(self, other):
+    if self.name != other.name:
+      return [ "names ('{}' =/= '{}')".format(self.name, other.name) ]
+    if self.content != other.content:
+      return [ "content ('{}' =/= '{}')".format(self.content, other.content) ]
+    if self.successors != other.successors:
+      return [
+        "successors: {}".format(d)
+          for d in diff(self.successors, other.successors)
+      ]
+    return []
+
   def _pack_(self):
     """
     Returns a simplified version suitable for json.dumps. See packable.py.
@@ -143,22 +177,24 @@ class StoryNode:
       "name": "at_the_beach",
       "content": "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
       "successors": {
-        "The sea": [ "wading_out", [ "set mood \"desolate\"" ] ],
+        "The sea": [ "wading_out", [ "set mood \\"desolate\\"" ] ],
         "go home": "back_home"
       }
     }
     ```
     """
-    return {
+    result = {
       "name": self.name,
       "content": self.content,
-      "successors": {
+    }
+    if self.successors:
+      result["successors"] = {
         k: pack(v[0])
           if len(v[1]) == 0
           else pack(v)
           for (k, v) in self.successors.items()
       }
-    }
+    return result
 
   def _unpack_(obj):
     """
@@ -204,6 +240,29 @@ class Story:
       raise ValueError(
         "Start node '{}' not found among story nodes.".format(self.start)
       )
+
+  def __hash__(self):
+    return (
+      hash(self.name) * 17
+    + hash(self.start) * 11
+    + sum(hash(n) * (3+i) for i, n in enumerate(self.nodes.values()))
+  )
+
+  def __eq__(self, other):
+    if not isinstance(other, Story):
+      return False
+    if self.name != other.name:
+      return False
+    if self.nodes != other.nodes:
+      return False
+    return True
+
+  def _diff_(self, other):
+    if self.name != other.name:
+      return ["names ('{}' =/= '{}')".format(self.name, other.name)]
+    if self.nodes != other.nodes:
+      return ["nodes: {}".format(d) for d in diff(self.nodes, other.nodes)]
+    return []
 
   def __str__(self):
     return "Story('{}')".format(self.name)
@@ -251,8 +310,8 @@ class Story:
           "name": "at_the_beach",
           "content": "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
           "successors": {
-            "The sea": [ "wading_out", [ "set mood 'desolate'" ] ],
-            "go home": [ "back_home", [ "set mood 'warm'" ] ]
+            "The sea": [ "wading_out", [ "set mood \\"desolate\\"" ] ],
+            "go home": [ "back_home", [ "set mood \\"warm\\"" ] ]
           }
         },
         "wading_out": {
@@ -270,7 +329,7 @@ class Story:
     return {
       "name": self.name,
       "start": self.start,
-      "nodes": pack(self.successors)
+      "nodes": pack(self.nodes)
     }
 
   def _unpack_(obj):
