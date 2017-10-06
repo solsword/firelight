@@ -9,6 +9,12 @@ import json
 from packable import pack, unpack
 
 class StateChange:
+  """
+  A StateChange represents an update to the story state. It comes with a target
+  which specifies what part of the state to update and a value, which is used
+  in different ways depending on the specific kind of StateChange (see the
+  various subclasses).
+  """
   def __init__(self, key, value=None):
     self.keys = key.split(".")
 
@@ -107,11 +113,11 @@ class StateChange:
     raise NotImplementedError("StateChange is an abstract class.")
 
 class SetValue(StateChange):
+  """
+  A SetValue change sets a value, erasing any previous value. Unlike other
+  changes, SetValue changes can create new keys.
+  """
   def apply(self, state):
-    """
-    A SetValue change sets a value, erasing any previous value. Unlike other
-    changes, SetValue changes can create new keys.
-    """
     target, key = self.find_target(self, state, create=True)
     target[key] = self.value
 

@@ -20,7 +20,7 @@
     },
     "links": {
       "name": "links",
-      "content": "Available options are written in brackets. Reply with an unambiguous prefix to make a decision. back"
+      "content": "Available options are written in brackets. Reply with an unambiguous prefix to make a decision. back",
       "successors": {
         "back": "help",
         "brackets": "brackets"
@@ -28,7 +28,7 @@
     },
     "brackets": {
       "name": "brackets",
-      "content": "Exactly. Good job following that link! back"
+      "content": "Exactly. Good job following that link! back",
       "successors": {
         "back": "links"
       }
