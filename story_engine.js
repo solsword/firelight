@@ -22,8 +22,12 @@ function show_node(node) {
  * Returns HTML for the given node.
  */
 function render_node(node) {
+  console.log("N");
+  console.log(node);
   result = node["content"];
-  successors = node["successors"];
+  successors = node["successors"] || {};
+  console.log("A");
+  console.log(result);
   Object.keys(successors).forEach(function (key) {
     if (successors[key] instanceof Array) {
       target = successors[key][0]
@@ -36,13 +40,16 @@ function render_node(node) {
       key,
       "<a href='#"
       + target
-      + "' onclick='function() {"
+      + "' onclick='"
       + JSON.stringify(changes)
-      + ".forEach(function (change) { implement_state_change(change); });}'>["
+      + ".forEach(function (change) { implement_state_change(change); });'>["
       + key
       + "]</a>"
     );
   });
+  console.log("B");
+  console.log(result);
+  return result;
 }
 
 /*
@@ -99,6 +106,7 @@ function set_state_value(target, value) {
  */
 function reset() {
   STATE = {};
+  window.location.hash = "";
   show_node(STORY["nodes"][STORY["start"]]);
 }
 
@@ -108,7 +116,12 @@ window.onload = function() {
   document.getElementById("reset").onclick = function() { reset(); }
 
   window.onhashchange = function () {
-    show_node(get_location());
+    node = STORY["nodes"][get_location()]
+    if (node) {
+      show_node(node);
+    } else {
+      show_node(STORY["nodes"][STORY["start"]]);
+    }
   }
 
   reset();

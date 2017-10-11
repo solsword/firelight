@@ -14,6 +14,44 @@ TEMPLATE = """\
 <html>
 <head>
   <title>{title}</title>
+  <style>
+body {{
+  font-size: 22pt;
+  text-align: right;
+}}
+
+#content {{
+  text-align: left;
+  margin: 1em auto 0 auto;
+  padding: 1em;
+  min-width: 20em;
+  width: 90%;
+  color: black;
+  background-color: #ddd;
+  border: 1pt solid #aaa;
+  border-radius: 4pt;
+}}
+
+#reset {{
+  display: inline-block;
+  position: relative;
+  top: 8pt;
+  right: 5%;
+
+  font-size: 20pt;
+  padding: 4pt 6pt 4pt 6pt;
+  border: 1pt solid black;
+  border-radius: 4pt;
+  background-color: #aaa;
+  color: #444;
+}}
+
+#reset:active {{
+  border: 1pt solid #999; 
+  color: #666;
+  background-color: #999;
+}}
+  </style>
   <script type="text/javascript">
 STORY = {story_content};
 {engine}
@@ -23,7 +61,7 @@ STORY = {story_content};
   <div id="content">
     Loading story...
   </div>
-  <input type="button" id="reset">Start Over</input>
+  <button type="button" id="reset">Start Over</button>
 </body>
 </html>
 """

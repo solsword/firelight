@@ -31,16 +31,54 @@ class TwitterAPI:
     """
     return len(message) <= config.CHAR_LIMIT
 
-  def tweet(self, message):
+  def coerce(self, message):
     """
-    Posts the given tweet, if it's valid, returning True. If there's a problem,
-    it returns False.
+    Takes a possibly-invalid message and returns a valid message, which may be
+    incomplete or otherwise degraded. Note that e.g., links may be broken.
+    """
+    return message[config.CHAR_LIMIT]
+
+  def tweet(self, message, force=False):
+    """
+    Posts the given tweet, if it's valid, returning the tweet's ID. If there's
+    a problem, it returns None. If force is given, as much as possible of the
+    message is posted, even if there is a problem.
     """
     if not self.validate(message):
-      return False
+      if force:
+        message = self.coerce(message)
+      else:
+        return None
 
     self.api.update_status(status=message)
-    return True
+    # TODO: How to get ID of what we just tweeted?
+    return ID
+
+  def tweet_reply(self, reply_to, message, force=False):
+    """
+    Works like tweet, but posts the response in reply to the given tweet ID.
+    """
+    if not self.validate(message):
+      if force:
+        message = self.coerce(message)
+      else:
+        return None
+
+    # TODO: Correct argument name here; how to get ID?
+    self.api.update_status(status=message, in_reply_to=reply_to)
+    return ID
+
+  def tweet_replies(self, reply_to, messages, force=False):
+    """
+    Works like tweet_reply, but sends a chain of responses and returns the ID
+    of the last one. Returns None if any reply fails.
+    """
+    for m in messages:
+      reply_to = self.tweet_reply(reply_to, m, force=force)
+      if reply_to is None:
+        return None
+
+    return reply_to
 
   def handle_mentions(self, callback):
     """

@@ -7,8 +7,8 @@
       "content":
 "Firelight is an interactive story engine. Options appear in brackets. Help topics: version links",
       "successors": {
-        "version": "wading_out",
-        "links": "back_home"
+        "version": "version",
+        "links": "links"
       }
     },
     "version": {

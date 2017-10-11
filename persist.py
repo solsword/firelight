@@ -6,10 +6,15 @@ Persistent storage for Firelight bot.
 
 import sqlite3
 import os
+import sys
 import datetime
 import json
 
 import config
+
+from packable import pack, unpack
+
+from story import Story
 
 class Storage:
   def __init__(self, db_filename=config.DB_FILE):
@@ -67,14 +72,26 @@ class Storage:
 
     cur.execute(
       """
-      CREATE TABLE IF NOT EXISTS stories(
-        id INTEGER PRIMARY KEY,
+      CREATE TABLE IF NOT EXISTS tellings(
+        tweet INTEGER PRIMARY KEY,
         reader TEXT NOT NULL,
-        state TEXT NOT NULL
+        story TEXT NOT NULL,
+        node TEXT NOT NULL,
+        state TEXT NOT NULL,
+        is_head BOOLEAN NOT NULL
       );
       """
     )
-    # TODO: More tables...
+
+    cur.execute(
+      """
+      CREATE TABLE IF NOT EXISTS stories(
+        title TEXT NOT NULL,
+        package TEXT NOT NULL
+      );
+      """
+    )
+
     self.connection.commit()
 
   def save_state(self, key, value):
@@ -107,61 +124,132 @@ class Storage:
     value = row[key]
     return value
 
-  def create_new_story(self, reader, story_name):
+  def save_new_story(self, story):
     """
-    Creates a new story and stores it in the database, returning the story's ID.
+    Saves a new story to the database. Returns True if it succeeds, or False
+    (and prints a warning message) if a story by that title already exists.
     """
     cur = self.connection.cursor()
+    title = story.name
+    cur.execute("SELECT * FROM stories WHERE title = ?;", (title,))
+    if len(cur.fetchall()) > 0:
+      print(
+        "Warning: attempted to save new story with duplicate title '{}'."
+        .format(
+          title
+        )
+        file=sys.stderr
+      )
+      return False
+
+    # TODO: maximize packing efficiency
+    cur.execute(
+      "INSERT INTO stories(title, package) values(?, ?);",
+      ( title, pack(story) )
+    )
+
+    self.connection.commit()
+    return True
+
+  def update_story(self, story):
+    """
+    Updates a story in the database, overwriting the current contents.
+    """
+    cur = self.connection.cursor()
+    # TODO: maximize packing efficiency
+    cur.execute(
+      "UPDATE stories SET package = ? WHERE title = ?;",
+      ( pack(story), story.name )
+    )
+    # TODO: Error handling here
+    self.connection.commit()
+
+  def recall_story(self, title):
+    """
+    Looks up a story in the database and returns it, or None if no such story
+    exists.
+    """
+    cur = self.connection.cursor()
+    cur.execute(
+      "SELECT package FROM stories WHERE title = ?;",
+      (title,)
+    )
+    rows = cur.fetchall()
+    if len(rows) < 1:
+      return None
+
+    return unpack(rows[0]["package"], Story)
+
+
+  def begin_telling(self, tweet, reader, title):
+    """
+    Creates a new telling in the database starting at the start node of the
+    given story with the default starting state.
+    """
+    cur = self.connection.cursor()
+    story = self.recall_story(title)
     # Create a new story for this reader and return its ID.
     cur.execute(
       (
-        "INSERT INTO stories(reader, state) values(?, ?); "
-        "SELECT last_insert_rowid();"
+        "INSERT INTO tellings(tweet, reader, story, node, state, is_head) "
+        "values(?, ?, ?, ?, ?, ?);"
       ),
-      (reader, json.dumps( {"_name_": story_name, "_status_": "starting" } ))
+      (
+        tweet,
+        reader,
+        story.name,
+        story.start,
+        json.dumps( story.initial_state() ),
+        True
+      )
     )
     self.connection.commit()
-    row = cur.fetchone()
-    return row["id"]
 
-  def get_story_state(self, story_id):
+  def extend_telling(self, tweet_from, new_tweet, new_node, new_state):
     """
-    Fetches the story state for the given story_id. If no such state exists,
-    returns None. Story state is stored as JSON, so the object returned will be
-    a simple Python object.
+    Extends an existing telling from the given tweet with the new tweet, using
+    the new node name and state as given (the state will be dumped to a JSON
+    string). Note that calling this with a "new_tweet" value that's already
+    registered will cause an error.
     """
     cur = self.connection.cursor()
     cur.execute(
-      "SELECT state FROM stories WHERE id = ?;"
-      (story_id,)
+      (
+        "INSERT INTO tellings(tweet, reader, story, node, state, is_head) "
+        "SELECT ?, reader, story, ?, ?, TRUE FROM tellings "
+        "WHERE tweet = ?; "
+        "UPDATE tellings SET is_head = FALSE WHERE tweet = ?;"
+      ),
+      (
+        new_tweet,
+        new_node,
+        json.dumps( new_state ),
+        tweet_from,
+        tweet_from
+      )
+    )
+    self.connection.commit()
+
+  def recall_telling(self, tweet):
+    """
+    Fetches the story state for the given tweet. If no such state exists,
+    returns None. Returns a tuple of reader, story_name, story_node,
+    story_state, and is_head. The story state JSON will be unpacked into a
+    simple Python object.
+    """
+    cur = self.connection.cursor()
+    cur.execute(
+     "SELECT reader, story, node, state, is_head FROM tellings WHERE tweet = ?;"
+      (tweet,)
     )
     row = cur.fetchone()
     if not row:
       return None
     else:
-      return json.loads(row["state"])
-
-  def update_story_state(self, story_id, state):
-    """
-    Updates the story state for the given story (the given object must be
-    dumpable to JSON). If there is no such state, a ValueError is raised.
-    """
-    cur = self.connection.cursor()
-    cur.execute(
-      "SELECT state FROM stories WHERE id = ?;"
-      (story_id,)
-    )
-    row = cur.fetchone()
-    if row:
-      cur.execute(
-        "UPDATE stories SET state = ? WHERE id = ?;"
-        (json.dumps(state), story_id,)
-      )
-      self.connection.commit()
-    else:
-      raise ValueError(
-        "Story {} does not exist for reader '{}'.".format(
-          story_id,
-          reader
-        )
+      return (
+        row["reader"],
+        row["story"],
+        row["node"],
+        json.loads(row["state"]),
+        row["is_head"]
       )

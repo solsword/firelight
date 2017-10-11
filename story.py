@@ -5,101 +5,41 @@ Story functionality including tracking state and making choices. Doesn't deal
 with twitter directly.
 """
 
-import persist
+import copy
+
 from state import StateChange
 
 from packable import pack, unpack
 from diffable import diff
 
-class Telling:
+
+# TODO: these
+GLOBAL_COMMANDS = {
+  "<title>": None
+  "<status>": None
+}
+
+def format_node(node, highlight="bracket"):
   """
-  Keeps track of story state, and presents bits of content in a stream, waiting
-  for user input at branches. Structure is determined by node links.
+  Returns a string to display to the player for the given story node. The
+  'highlight' argument controls how options that occur within the content are
+  highlighted. Valid values include None (base content used as-is),
+  "bracket" (the default; square brackets will be added around option
+  words), and "link" (option words will be rendered as HTML anchor elements
+  that link to an anchor with their name.)
   """
-  def __init__(self, reader, story, start_node):
-    self.story = story
-    self.on_deck = start_node
-    self.decisions = []
-    self.nodes = []
-    self.reader = reader
-    self.story_id = persist.create_new_story(reader, story.name)
-    self.status = "starting"
-
-  def current_content(self, highlight="bracket"):
-    """
-    Returns a string to display to the player for the current story node. The
-    'highlight' argument controls how options that occur within the content are
-    highlighted. Valid values include None (base content used as-is),
-    "bracket" (the default; square brackets will be added around option
-    words), and "link" (option words will be rendered as HTML anchor elements
-    that link to an anchor with their name.)
-    """
-    content = self.on_deck.content
-    if highlight == "bracket":
-      for opt in self.on_deck.successors:
-        content = re.sub(r"\b{}\b".format(opt), "[{}]".format(opt), content)
-    elif highlight == "link":
-      for opt in self.on_deck.successors:
-        content = re.sub(
-          r"\b{}\b".format(opt),
-          r'<a href="#{}">{}</a>'.format(opt, opt),
-          content
-        )
-    return content
-
-  def advance(self, decision):
-    """
-    Takes a decision (naming an option at the current node) and advances the
-    story, taking the currently-on-deck node and adding it to the history along
-    with the decision reached, and putting the next node on deck after
-    implementing state changes.
-    """
-    if self.status == "finished":
-      raise RuntimeError(
-        "Attempted to advance finished story '{}'::{}.".format(
-          self.stoy.name,
-          self.reader
-        )
+  content = self.on_deck.content
+  if highlight == "bracket":
+    for opt in self.on_deck.successors:
+      content = re.sub(r"\b{}\b".format(opt), "[{}]".format(opt), content)
+  elif highlight == "link":
+    for opt in self.on_deck.successors:
+      content = re.sub(
+        r"\b{}\b".format(opt),
+        r'<a href="#{}">{}</a>'.format(opt, opt),
+        content
       )
-
-    if decision not in self.on_deck.successors:
-      raise ValueError(
-        "Invalid decision '{}' at node '{}'.".format(
-          decision,
-          self.on_deck.name
-        )
-      )
-    next_name, state_changes = self.on_deck.successors[decision]
-
-    self.nodes.append(self.on_deck)
-    self.decisions.append(decision)
-
-    if self.status == "starting":
-      self.status = "unfolding"
-
-    # put the next node on deck:
-    nod = self.story.get(next_name)
-    if nod is None:
-      raise ValueError(
-        "Decision '{}' at node '{}' leads to missing node '{}'.".format(
-          decision,
-          self.on_deck.name,
-          next_name
-        )
-      )
-
-    self.on_deck = nod
-
-    if nod.is_ending():
-      self.status = "finished"
-
-    # implement state updates:
-    state = persist.get_story_state(self.story_id)
-    state["_status_"] = self.status
-    for sc in state_changes:
-      sc.apply(state)
-
-    persist.update_story_state(self.story_id, state)
+  return content
 
 
 class StoryNode:
@@ -350,3 +290,97 @@ class Story:
     Returns the story node with the given name, or None if no such node exists.
     """
     return self.nodes.get(node_name, None)
+
+  def initial_state(self):
+    """
+    Returns the initial state for the this story.
+    """
+    # TODO: More fancy here
+    return {
+      "_name_": self.name,
+      "_status_": "beginning"
+    }
+
+  def advance(self, node_name, state, decision, highlight="bracket"):
+    """
+    Takes a decision (naming an option at the given node) and figures out how
+    the story continues, returning a tuple of continuation texts list, new
+    current node, and new story state. The 'highlight' argument is passed
+    through to the format_node function. Note that the state argument may be
+    modified.
+    """
+    if node_name not in self.nodes:
+      return (
+        [
+          "StoryError: node '{}' not in story '{}'.".format(
+            node_name,
+            self.name
+          ),
+          "Starting over from the beginning.",
+          format_node(self.nodes[self.start], highlight=highlight)
+        ],
+        self.start,
+        self.initial_state()
+      )
+
+    node = self.nodes[node_name]
+    if state["_status_"] == "finished":
+      return (
+        [ "This telling has come to an end." ],
+        node_name,
+        state
+      )
+
+    if decision in GLOBAL_COMMANDS:
+      # TODO: What here?
+      return (
+        [ "Command {}.".format(decision) ],
+        node_name,
+        state
+      )
+
+    if decision not in node.successors:
+      # TODO: Better here?
+      return (
+        [
+          "'{}' is not a valid decision at this point in the story.",
+          format_node(node, highlight=highlight)
+        ],
+        node_name,
+        state
+      )
+
+    next_name, state_changes = node.successors[decision]
+
+    if state["_status_"] == "beginning":
+      state["_status_"] = "unfolding"
+
+    # put the next node on deck:
+    next_node = self.get(next_name)
+    if next_node is None:
+      # TODO: Log these errors!
+      return (
+        [
+          "StoryError: Broken link from '{}' to '{}'.".format(
+            node_name,
+            next_node
+          ),
+          "Starting over from the beginning.",
+          format_node(self.nodes[self.start], highlight=highlight)
+        ],
+        self.start,
+        self.initial_state()
+      )
+
+    if next_node.is_ending():
+      state["_status_"] = "finished"
+
+    # implement state updates:
+    for sc in state_changes:
+      sc.apply(state)
+
+    return (
+      [ format_node(next_node, highlight=highlight) ],
+      next_name,
+      state
+    )
