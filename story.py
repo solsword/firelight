@@ -14,8 +14,8 @@ from diffable import diff
 
 
 # TODO: these
-GLOBAL_COMMANDS = {
-  "<title>": None
+STORY_COMMANDS = {
+  "<title>": None,
   "<status>": None
 }
 
@@ -331,7 +331,7 @@ class Story:
         state
       )
 
-    if decision in GLOBAL_COMMANDS:
+    if decision in STORY_COMMANDS:
       # TODO: What here?
       return (
         [ "Command {}.".format(decision) ],

@@ -5,9 +5,12 @@ Main file for the Firelight twitter bot. See api.py and story.py for top-level
 functionality.
 """
 
+import re
 import os
+import sys
 import json
 import time
+import traceback
 
 import tweepy
 
@@ -16,6 +19,9 @@ import story
 import config
 
 from packable import pack, unpack
+
+def strip_handles(message):
+  return re.sub('@', r'@\\', message)
 
 def get_tokens(filename=config.DEFAULT_TOKENS_FILE):
   """
@@ -38,16 +44,19 @@ def load_stories(core, directory):
       if f.endswith(".fls"):
         with open(os.path.join(dirpath, f), 'r') as fin:
           try:
-            story = unpack(json.loads(fin.read()), story.Story)
-          except:
+            st = unpack(json.loads(fin.read()), story.Story)
+          except Exception as e:
             print(
               "Warning: file '{}' could not be read as a Story.".format(
                 os.path.join(dirpath, f)
               )
             )
+            if config.DEBUG:
+              print(e, file=sys.stderr)
+              traceback.print_tb(e.__traceback__, file=sys.stderr)
             continue # continue to the next file
 
-          core.db.save_new_story(story)
+          core.db.save_new_story(st)
 
 def handle_story_reply(core, tweet, in_reply_to, sender, current_state):
   """
@@ -77,6 +86,7 @@ def handle_story_reply(core, tweet, in_reply_to, sender, current_state):
     # TODO: Tweet error reply
     core.tweet_reply(
       tweet.id,
+      tweet.user.name,
       "TellingError: story not found: '{}'".format(story),
       force=True
     )
@@ -97,18 +107,26 @@ def handle_general_command(core, tweet, sender):
   to story tweets, and which are thus interpreted as general commands. Besides
   the tweet object, requires an API (core) and a sender name.
   """
-  command = tweet.text.strip().split()[0]
+  chunks = tweet.text.strip().split()
+  command = chunks[0]
+  args = tweet.text.strip()[len(command):]
+  if command == "@{}".format(config.MY_HANDLE):
+    command = chunks[1]
+    args = tweet.text.strip()[len(chunks[0]) + len(command) + 1:]
+
   if command in ("help", "[help]"):
     st = core.db.recall_story("help")
     if not st:
       core.tweet_reply(
         tweet.id,
+        tweet.user.name,
         "Sorry, there's no help available.",
         force=True
       )
     else:
       tid = core.tweet_reply(
         tweet.id,
+        tweet.user.name,
         story.format_node(st.nodes[st.start]),
         force=True
       )
@@ -126,12 +144,13 @@ def handle_general_command(core, tweet, sender):
     )
 
   elif command in ("tell", "[tell]"):
-    target_title = tweet.text[len(command):].strip()
+    target_title = args
     st = core.db.recall_story(target_title)
     if not st:
       # TODO: Find nearest matches?
       core.tweet_reply(
         tweet.id,
+        tweet.user.name,
         (
           "Sorry, I don't know a story called '{}'.\n"
           "You can try the [list] command."
@@ -141,6 +160,7 @@ def handle_general_command(core, tweet, sender):
     else:
       tid = core.tweet_reply(
         tweet.id,
+        tweet.user.name,
         story.format_node(st.nodes[st.start]),
         force=True
       )
@@ -151,41 +171,51 @@ def handle_general_command(core, tweet, sender):
     # TODO: Log failure
     core.tweet_reply(
       tweet.id,
-      "CommandError: unrecognized command '{}'".format(command),
+      tweet.user.name,
+      "CommandError: unrecognized command '{}'".format(strip_handles(command)),
       force=True
     )
+
+PROCESSING_TOTAL = 0
 
 def main():
   """
   The main loop of the bot.
   """
+  global PROCESSING_TOTAL
   tk = get_tokens()
   core = api.TwitterAPI(tk)
   load_stories(core, config.STORIES_DIRECTORY)
+
+  def handle_mention(tw):
+    global PROCESSING_TOTAL
+    nonlocal core
+    print("From: {}\nContent: {}".format(tw.user.screen_name, tw.text))
+    sender = tw.user.name
+    if tw.in_reply_to_status_id != None: # a reply to a tweet
+      replying_to = tw.in_reply_to_status_id
+      rec = core.db.recall_telling(replying_to)
+      if rec: # Replying to a live story node
+        handle_story_reply(core, tw, replying_to, sender, rec)
+      else: # Not a story-interaction reply
+        handle_general_command(core, tw, sender)
+    else: # must be a general command:
+      handle_general_command(core, tw, sender)
+    PROCESSING_TOTAL += 1
+
   try:
     while True:
-      total = 0
-      def handle_mention(tw):
-        nonlocal total
-        total += 1
-        print("From: {}\nContent: {}".format(tw.user.screen_name, tw.text))
-        sender = tw.user.name
-        if tw.is_reply: # a reply to a tweet
-          replying_to = tw.in_reply_to_status_id
-          rec = core.db.recall_telling(replying_to)
-          if rec: # Replying to a live story node
-            handle_story_reply(core, tw, replying_to, sender, rec)
-          else: # Not a story-interaction reply
-            handle_general_command(core, tw, sender)
-          thread = core.get_thread_id(tw)
-        else: # must be a general command:
-          handle_general_command(core, tw, sender)
+      PROCESSING_TOTAL = 0
+      try:
+        core.handle_mentions(handle_mention)
+      except Exception as e:
+        print("..error processing mentions; retrying next cycle...")
+        if config.DEBUG:
+          print(e, file=sys.stderr)
+          traceback.print_tb(e.__traceback__, file=sys.stderr)
 
-        # TODO: HERE
-
-      core.handle_mentions(handle_mention)
-      print("Processed {} total mentions.".format(total))
-      time.sleep(5)
+      print("Processed {} total mentions.".format(PROCESSING_TOTAL))
+      time.sleep(3)
   except KeyboardInterrupt as e:
     print("\nShutting down.")
   core.shutdown()

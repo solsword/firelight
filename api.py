@@ -50,33 +50,49 @@ class TwitterAPI:
       else:
         return None
 
-    self.api.update_status(status=message)
-    # TODO: How to get ID of what we just tweeted?
-    # TODO: HERE
-    return ID
+    status = self.api.update_status(status=message)
+    return status.id
 
-  def tweet_reply(self, reply_to, message, force=False):
+  def tweet_reply(self, reply_to, reply_at, message, force=False):
     """
     Works like tweet, but posts the response in reply to the given tweet ID.
+    Note that a target username is also required for the reply to work;
+    reply_at may also be a list of usernames to reply to multiple people at
+    once.
     """
+    # TODO: Do we need to explicitly add usernames to content in order to
+    # thread tweets? (see:
+    #   https://developer.twitter.com/en/docs/tweets/post-and-engage/api-reference/post-statuses-update
+    # particularly the section on in_reply_to_status_id)
+    if isinstance(reply_at, (list, tuple)):
+      message = "{} {}".format(
+        ' '.join("@{}".format(at) for at in reply_at),
+        message
+      )
+    else:
+      messaage = "@{} {}".format(reply_at, message)
+
+    message = "@{} {}".format(config.MY_HANDLE, message)
+
     if not self.validate(message):
       if force:
         message = self.coerce(message)
       else:
         return None
 
-    # TODO: Correct argument name here; how to get ID?
-    self.api.update_status(status=message, in_reply_to=reply_to)
-    # TODO: HERE
-    return ID
+    status = self.api.update_status(
+      status=message,
+      in_reply_to_status_id=reply_to
+    )
+    return status.id
 
-  def tweet_replies(self, reply_to, messages, force=False):
+  def tweet_replies(self, reply_to, reply_at, messages, force=False):
     """
     Works like tweet_reply, but sends a chain of responses and returns the ID
     of the last one. Returns None if any reply fails.
     """
     for m in messages:
-      reply_to = self.tweet_reply(reply_to, m, force=force)
+      reply_to = self.tweet_reply(reply_to, reply_at, m, force=force)
       if reply_to is None:
         return None
 
@@ -84,7 +100,7 @@ class TwitterAPI:
 
   def handle_mentions(self, callback):
     """
-    Calls the given callback on any fresh mentions.
+    Calls the given callback on any fresh mentions, excluding self-mentions.
     """
     lpm = self.db.load_state("last_processed_mention")
     if lpm:
@@ -101,7 +117,9 @@ class TwitterAPI:
           break
         if not new_lpm: # save first id encountered:
           new_lpm = tweet.id
-        callback(tweet)
+
+        if tweet.user.name != config.MY_HANDLE:
+          callback(tweet)
 
     if new_lpm:
       self.db.save_state("last_processed_mention", new_lpm)

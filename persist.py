@@ -47,6 +47,18 @@ class Storage:
       self.connection.close()
       self.connection = None
 
+  def reset_database(self):
+    """
+    Cleans out all database information and recreates empty tables.
+    """
+    cur = self.connection.cursor()
+    cur.execute("DROP TABLE IF EXISTS state;")
+    cur.execute("DROP TABLE IF EXISTS tellings;")
+    cur.execute("DROP TABLE IF EXISTS stories;")
+    self.connection.commit()
+
+    self.setup_tables()
+
   def setup_tables(self):
     """
     Creates tables in the database.
@@ -137,7 +149,7 @@ class Storage:
         "Warning: attempted to save new story with duplicate title '{}'."
         .format(
           title
-        )
+        ),
         file=sys.stderr
       )
       return False
@@ -246,7 +258,10 @@ class Storage:
     """
     cur = self.connection.cursor()
     cur.execute(
-     "SELECT reader, story, node, state, is_head FROM tellings WHERE tweet = ?;"
+      """
+SELECT reader, story, node, state, is_head
+FROM tellings WHERE tweet = ?;
+      """,
       (tweet,)
     )
     row = cur.fetchone()

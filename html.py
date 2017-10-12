@@ -18,38 +18,69 @@ TEMPLATE = """\
 body {{
   font-size: 22pt;
   text-align: right;
+  background-color: #666;
+}}
+
+#title {{
+  text-align: center;
+  margin: 1em auto 0 auto;
+  min-width: 8em;
+  width: 50%;
+  padding: 0.6em;
+  color: black;
+  background-color: #eee;
+  border-top: 2pt solid #aaa;
+  border-left: 2pt solid #aaa;
+  border-right: 2pt solid #aaa;
+  border-radius: 4pt 4pt 0 0;
 }}
 
 #content {{
   text-align: left;
-  margin: 1em auto 0 auto;
+  margin: 0 auto 0 auto;
   padding: 1em;
   min-width: 20em;
   width: 90%;
   color: black;
   background-color: #ddd;
-  border: 1pt solid #aaa;
+  border: 2pt solid #aaa;
   border-radius: 4pt;
 }}
 
 #reset {{
   display: inline-block;
   position: relative;
-  top: 8pt;
+  top: 0pt;
   right: 5%;
 
   font-size: 20pt;
   padding: 4pt 6pt 4pt 6pt;
-  border: 1pt solid black;
-  border-radius: 4pt;
+  border-top: 2pt solid #999;
+  border-left: 2pt solid black;
+  border-right: 2pt solid black;
+  border-bottom: 2pt solid black;
+  border-radius: 0 0 4pt 4pt;
   background-color: #aaa;
   color: #444;
 }}
 
 #reset:active {{
-  border: 1pt solid #999; 
+  border-top: 2pt solid #999;
+  border-left: 2pt solid #999; 
+  border-right: 2pt solid #999; 
+  border-bottom: 2pt solid #999; 
   color: #666;
   background-color: #999;
+}}
+
+a {{
+  color: black;
+  text-decoration: none;
+}}
+
+a:visited {{
+  color: black;
+  text-decoration: none;
 }}
   </style>
   <script type="text/javascript">
@@ -58,6 +89,9 @@ STORY = {story_content};
   </script>
 </head>
 <body>
+  <div id="title">
+    {title}
+  </div>
   <div id="content">
     Loading story...
   </div>
@@ -71,7 +105,7 @@ def package(story):
     ejs = fin.read()
 
   return TEMPLATE.format(
-    title=story.name,
+    title=story.name.title(),
     story_content = pack(story),
     engine = ejs
   )
