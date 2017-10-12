@@ -13,3 +13,5 @@ DB_FILE = "firelight.db"
 STATE_STRUCTURE = {
   "last_processed_mention": "INTEGER"
 }
+
+STORIES_DIRECTORY = "stories"

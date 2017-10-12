@@ -145,7 +145,7 @@ class Storage:
     # TODO: maximize packing efficiency
     cur.execute(
       "INSERT INTO stories(title, package) values(?, ?);",
-      ( title, pack(story) )
+      ( title, json.dumps(pack(story)) )
     )
 
     self.connection.commit()
@@ -159,7 +159,7 @@ class Storage:
     # TODO: maximize packing efficiency
     cur.execute(
       "UPDATE stories SET package = ? WHERE title = ?;",
-      ( pack(story), story.name )
+      ( json.dumps(pack(story)), story.name )
     )
     # TODO: Error handling here
     self.connection.commit()
@@ -178,8 +178,15 @@ class Storage:
     if len(rows) < 1:
       return None
 
-    return unpack(rows[0]["package"], Story)
+    return unpack(json.loads(rows[0]["package"]), Story)
 
+  def story_list(self):
+    """
+    Returns a list of all known story titles.
+    """
+    cur = self.connection.cursor()
+    cur.execute("SELECT title FROM stories;")
+    return [row["title"] for row in cur.fetchall()]
 
   def begin_telling(self, tweet, reader, title):
     """

@@ -52,6 +52,7 @@ class TwitterAPI:
 
     self.api.update_status(status=message)
     # TODO: How to get ID of what we just tweeted?
+    # TODO: HERE
     return ID
 
   def tweet_reply(self, reply_to, message, force=False):
@@ -66,6 +67,7 @@ class TwitterAPI:
 
     # TODO: Correct argument name here; how to get ID?
     self.api.update_status(status=message, in_reply_to=reply_to)
+    # TODO: HERE
     return ID
 
   def tweet_replies(self, reply_to, messages, force=False):
