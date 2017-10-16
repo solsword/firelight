@@ -142,7 +142,7 @@ class Storage:
     (and prints a warning message) if a story by that title already exists.
     """
     cur = self.connection.cursor()
-    title = story.name
+    title = story.name.lower()
     cur.execute("SELECT * FROM stories WHERE title = ?;", (title,))
     if len(cur.fetchall()) > 0:
       print(
@@ -171,7 +171,7 @@ class Storage:
     # TODO: maximize packing efficiency
     cur.execute(
       "UPDATE stories SET package = ? WHERE title = ?;",
-      ( json.dumps(pack(story)), story.name )
+      ( json.dumps(pack(story)), story.name.lower() )
     )
     # TODO: Error handling here
     self.connection.commit()
@@ -184,7 +184,7 @@ class Storage:
     cur = self.connection.cursor()
     cur.execute(
       "SELECT package FROM stories WHERE title = ?;",
-      (title,)
+      (title.lower(),)
     )
     rows = cur.fetchall()
     if len(rows) < 1:
@@ -194,7 +194,7 @@ class Storage:
 
   def story_list(self):
     """
-    Returns a list of all known story titles.
+    Returns a list of all known story titles (each in lower case).
     """
     cur = self.connection.cursor()
     cur.execute("SELECT title FROM stories;")
@@ -235,17 +235,19 @@ class Storage:
     cur.execute(
       (
         "INSERT INTO tellings(tweet, reader, story, node, state, is_head) "
-        "SELECT ?, reader, story, ?, ?, TRUE FROM tellings "
-        "WHERE tweet = ?; "
-        "UPDATE tellings SET is_head = FALSE WHERE tweet = ?;"
+        "SELECT ?, reader, story, ?, ?, 1 FROM tellings "
+        "WHERE tweet = ?;"
       ),
       (
         new_tweet,
         new_node,
         json.dumps( new_state ),
-        tweet_from,
         tweet_from
       )
+    )
+    cur.execute(
+      "UPDATE tellings SET is_head = 0 WHERE tweet = ?;",
+      (tweet_from,)
     )
     self.connection.commit()
 

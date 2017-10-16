@@ -9,7 +9,23 @@ import persist
 
 import config
 
-class TwitterAPI:
+# See: https://developer.twitter.com/en/docs/tweets/filter-realtime/guides/streaming-message-types
+DISCONNECT_CODES = {
+  1: "Shutdown",
+  2: "Duplicate Stream",
+  3: "Control request",
+  4: "Stall",
+  5: "Normal",
+  6: "Token Revoked",
+  7: "Admin Logout",
+  8: "Reserved Internal",
+  9: "Max Message Limit",
+  10: "Stream Exception",
+  11: "Broker Stall",
+  12: "Shed load",
+}
+
+class TwitterAPI(tweepy.StreamListener):
   def __init__(self, tokens):
     self.auth = tweepy.OAuthHandler(
       tokens["consumer_key"],
@@ -18,11 +34,79 @@ class TwitterAPI:
     self.auth.set_access_token(tokens["access"], tokens["access_secret"])
     self.api = tweepy.API(self.auth)
     self.db = persist.Storage()
+    self.handlers = []
+    self.global_counter = 0
+
+  def register_handler(self, fcn):
+    """
+    Registers a tweet handler.
+    """
+    self.handlers.append(fcn)
+
+  def remove_handler(self, fcn):
+    """
+    Removes a tweet handler.
+    """
+    self.handlers.remove(fcn)
+
+  def on_status(self, tweet):
+    """
+    Streaming handler for new statuses.
+    """
+    for h in self.handlers:
+      h(tweet)
+
+  def on_error(self, status_code):
+    """
+    Handles failed connection attempts.
+    """
+    if config.DEBUG:
+      print("Connection failed with code {}.".format(status_code))
+
+  def on_timeout(self):
+    """
+    Handles connection timeouts.
+    """
+    if config.DEBUG:
+      print("Connection timed out.")
+
+  def on_disconnect(self, notice):
+    """
+    Handles explicit disconnect notices.
+    """
+    if config.DEBUG:
+      print(
+        "Disconnecting due to: {}\nReason: {}".format(
+          DISCONNECT_CODES[notice["code"]],
+          notice["reason"]
+        )
+      )
+
+  def stream_user_tweets(self, screen_name):
+    """
+    Initiates the streaming process for tweets mentioning a particular user
+    name (supply without the '@'). This method doesn't return until the
+    stream is disconnected.
+    """
+    self.stream = tweepy.Stream(auth=self.api.auth, listener = self)
+    # TODO: Is using a filter here instead of a user stream correct? Seems
+    # wrong, but user streams don't give you mentions? *Could* go with a
+    # replies-only design?
+    self.stream.filter(
+      track=["@{}".format(screen_name)]
+    )
+
+  def stop_streaming(self):
+    """
+    Stops streaming.
+    """
+    self.stream.disconnect()
 
   def shutdown(self):
     """
     Shuts down the various connections.
     """
+    self.stream.disconnect()
     self.db.disconnect()
 
   def validate(self, message):
@@ -37,6 +121,86 @@ class TwitterAPI:
     incomplete or otherwise degraded. Note that e.g., links may be broken.
     """
     return message[config.CHAR_LIMIT]
+
+  def incremenet_counter(self):
+    """
+    Method for incrementing the global counter just-in-case.
+    """
+    self.global_counter += 1
+
+  def ntag(self, n):
+    """
+    Turns a number into an N-character tag. Overflows wrap. Uses and increments
+    the global counter.
+    """
+    # TODO: We need a more robust solution, as this is exploitable!
+    n += self.global_counter
+    self.global_counter += 1
+    l = len(config.TAGCHARS)
+    n %= l**config.NTAG_SIZE
+    tag = config.TAGCHARS[n%l]
+    for i in range(config.NTAG_SIZE-1):
+      n //= l
+      tag += config.TAGCHARS[n%l]
+    return tag
+
+  def format_into_messages(self, content, reply_at=None, start=0):
+    """
+    Takes arbitrary-length content (possibly in reply to a specific user) and
+    formats it into a series of tweetable chunks, each of which includes a
+    count tag to help avoid duplicate status problems.
+    """
+    leftovers = content
+    n = start
+    results = []
+    while leftovers:
+      tw, leftovers = self.format_first_message(content, reply_at, n)
+      n += 1
+      results.append(tw)
+
+    return results
+
+  def format_first_message(self, content, reply_at=None, number=0):
+    """
+    Takes content and formats part of it into a tweet, returning that tweet
+    text and any leftover text as a pair.
+    """
+    ntag = " " + self.ntag(number)
+    rtag = ""
+    if reply_at:
+      rtag = "@{} ".format(reply_at)
+
+    reserved = len(rtag) + len(ntag)
+    allowance = config.CHAR_LIMIT - reserved
+    words = 0
+    backup = 0
+    for i in range(len(content)):
+      if i == len(content) - 1:
+        if i <= allowance:
+          return (
+            "{}{}{}".format(rtag, content, ntag),
+            ""
+          )
+        else:
+          return (
+            "{}{}{}".format(rtag, content[:allowance], ntag),
+            content[allowance:]
+          )
+      if content[i] in " 	\n":
+        if i < allowance:
+          backup = i
+        else:
+          if backup > 0:
+            return (
+              "{}{}{}".format(rtag, content[:backup], ntag),
+              content[backup:]
+            )
+          else:
+            return (
+              "{}{}{}".format(rtag, content[:allowance], ntag),
+              content[allowance:]
+            )
+    raise RuntimeError("Fell out of loop in format_first_message.")
 
   def tweet(self, message, force=False):
     """
@@ -70,9 +234,7 @@ class TwitterAPI:
         message
       )
     else:
-      messaage = "@{} {}".format(reply_at, message)
-
-    message = "@{} {}".format(config.MY_HANDLE, message)
+      message = "@{} {}".format(reply_at, message)
 
     if not self.validate(message):
       if force:
@@ -98,9 +260,36 @@ class TwitterAPI:
 
     return reply_to
 
+  def tweet_long(self, message, reply_to=None, reply_at=None):
+    """
+    Posts longer content with automatic numbering and splitting across multiple
+    tweets. If the content should be tweeted as a reply, both reply_to and
+    reply_at must be given.
+    """
+    if isinstance(message, (list, tuple)):
+      payloads = []
+      for m in message:
+        payloads.extend(self.format_into_messages(m, reply_at))
+    else:
+      payloads = self.format_into_messages(message, reply_at)
+
+    if reply_to is None:
+      first = self.tweet(payloads[0], force=True)
+      last = self.tweet_replies(
+        first,
+        config.MY_HANDLE,
+        payloads[1:],
+        force=True
+      )
+    else:
+      last = self.tweet_replies(reply_to, reply_at, payloads, force=True)
+    return last
+
   def handle_mentions(self, callback):
     """
     Calls the given callback on any fresh mentions, excluding self-mentions.
+    Note that rate-limiting makes the streaming approach much better for
+    real-time interaction.
     """
     lpm = self.db.load_state("last_processed_mention")
     if lpm:
@@ -118,7 +307,7 @@ class TwitterAPI:
         if not new_lpm: # save first id encountered:
           new_lpm = tweet.id
 
-        if tweet.user.name != config.MY_HANDLE:
+        if tweet.user.screen_name != config.MY_HANDLE:
           callback(tweet)
 
     if new_lpm:

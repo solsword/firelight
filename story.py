@@ -6,6 +6,7 @@ with twitter directly.
 """
 
 import copy
+import re
 
 from state import StateChange
 
@@ -15,8 +16,8 @@ from diffable import diff
 
 # TODO: these
 STORY_COMMANDS = {
-  "<title>": None,
-  "<status>": None
+  "/title/": None,
+  "/status/": None
 }
 
 def format_node(node, highlight="bracket"):
@@ -28,12 +29,12 @@ def format_node(node, highlight="bracket"):
   words), and "link" (option words will be rendered as HTML anchor elements
   that link to an anchor with their name.)
   """
-  content = self.on_deck.content
+  content = node.content
   if highlight == "bracket":
-    for opt in self.on_deck.successors:
+    for opt in node.successors:
       content = re.sub(r"\b{}\b".format(opt), "[{}]".format(opt), content)
   elif highlight == "link":
-    for opt in self.on_deck.successors:
+    for opt in node.successors:
       content = re.sub(
         r"\b{}\b".format(opt),
         r'<a href="#{}">{}</a>'.format(opt, opt),
@@ -285,7 +286,7 @@ class Story:
       }
     )
 
-  def get(node_name):
+  def get(self, node_name):
     """
     Returns the story node with the given name, or None if no such node exists.
     """
@@ -312,7 +313,7 @@ class Story:
     if node_name not in self.nodes:
       return (
         [
-          "StoryError: node '{}' not in story '{}'.".format(
+          "Sorry, I've gotten confused at '{}' in '{}'.".format(
             node_name,
             self.name
           ),
@@ -331,7 +332,7 @@ class Story:
         state
       )
 
-    if decision in STORY_COMMANDS:
+    if decision.lower() in STORY_COMMANDS:
       # TODO: What here?
       return (
         [ "Command {}.".format(decision) ],
@@ -339,31 +340,38 @@ class Story:
         state
       )
 
-    if decision not in node.successors:
+    matching_key = None
+    for k in node.successors:
+      if k.lower() == decision.lower():
+        matching_key = k
+
+    if matching_key is None:
       # TODO: Better here?
       return (
         [
-          "'{}' is not a valid decision at this point in the story.",
+          "'{}' is not a valid decision at this point in the story.".format(
+            decision.lower()
+          ),
           format_node(node, highlight=highlight)
         ],
         node_name,
         state
       )
 
-    next_name, state_changes = node.successors[decision]
+    next_name, state_changes = node.successors[matching_key]
 
     if state["_status_"] == "beginning":
       state["_status_"] = "unfolding"
 
-    # put the next node on deck:
+    # get the next node:
     next_node = self.get(next_name)
     if next_node is None:
       # TODO: Log these errors!
       return (
         [
-          "StoryError: Broken link from '{}' to '{}'.".format(
-            node_name,
-            next_node
+          "Sorry, I've forgotten '{}' which should come after '{}'.".format(
+            next_node,
+            node_name
           ),
           "Starting over from the beginning.",
           format_node(self.nodes[self.start], highlight=highlight)

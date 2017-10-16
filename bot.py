@@ -83,20 +83,38 @@ def handle_story_reply(core, tweet, in_reply_to, sender, current_state):
   # Recall the story being responded to:
   st = core.db.recall_story(story)
   if not st:
-    # TODO: Tweet error reply
-    core.tweet_reply(
-      tweet.id,
-      tweet.user.name,
-      "TellingError: story not found: '{}'".format(story),
-      force=True
+    core.tweet_long(
+      "Sorry, I've forgotten the story '{}'. Something is wrong :(".format(
+        story
+      ),
+      reply_to=tweet.id,
+      reply_at=tweet.user.screen_name,
     )
     return
 
   # Compute replies and new state:
-  replies, new_node, new_state = st.advance(node, state, tweet.text)
+  address = tweet.text.strip().split()[0]
+  rest = tweet.text.strip()
+  if address == "@{}".format(config.MY_HANDLE):
+    rest = tweet.text[len(address):].strip()
+
+  command = rest.lower()
+  try:
+    fh = command.index('#')
+  except ValueError as e:
+    fh = -1
+
+  if fh >= 0:
+    command = command[:fh].strip()
+
+  replies, new_node, new_state = st.advance(node, state, command)
 
   # Tweet replies:
-  latest = core.tweet_replies(in_reply_to, replies, force=True)
+  latest = core.tweet_long(
+    replies,
+    reply_to=tweet.id,
+    reply_at=sender
+  )
 
   # Update database:
   core.db.extend_telling(in_reply_to, latest, new_node, new_state)
@@ -108,72 +126,69 @@ def handle_general_command(core, tweet, sender):
   the tweet object, requires an API (core) and a sender name.
   """
   chunks = tweet.text.strip().split()
-  command = chunks[0]
-  args = tweet.text.strip()[len(command):]
+  command = chunks[0].lower()
+  args = tweet.text.strip()[len(command):].strip()
   if command == "@{}".format(config.MY_HANDLE):
-    command = chunks[1]
-    args = tweet.text.strip()[len(chunks[0]) + len(command) + 1:]
+    command = chunks[1].lower()
+    args = tweet.text.strip()[len(chunks[0]) + len(command) + 1:].strip()
 
   if command in ("help", "[help]"):
     st = core.db.recall_story("help")
     if not st:
-      core.tweet_reply(
-        tweet.id,
-        tweet.user.name,
+      core.tweet_long(
         "Sorry, there's no help available.",
-        force=True
+        reply_to=tweet.id,
+        reply_at=tweet.user.screen_name
       )
     else:
-      tid = core.tweet_reply(
-        tweet.id,
-        tweet.user.name,
+      tid = core.tweet_long(
         story.format_node(st.nodes[st.start]),
-        force=True
+        reply_to=tweet.id,
+        reply_at=tweet.user.screen_name,
       )
       core.db.begin_telling(tid, sender, "help")
 
   elif command in ("list", "[list]"):
     # TODO: automatic tweet breaking
-    core.tweet_replies(
-      tweet.id,
+    core.tweet_long(
       [
         "Okay, here are all the stories that I know:",
-        '"' + '"\n"'.join(core.db.story_list()) + '"'
+        '"' + '"\n"'.join(t.title() for t in core.db.story_list()) + '"'
       ],
-      force=True
+      tweet.id,
+      tweet.user.screen_name
     )
 
   elif command in ("tell", "[tell]"):
-    target_title = args
+    target_title = args.strip().lower()
     st = core.db.recall_story(target_title)
     if not st:
       # TODO: Find nearest matches?
-      core.tweet_reply(
-        tweet.id,
-        tweet.user.name,
+      core.tweet_long(
         (
           "Sorry, I don't know a story called '{}'.\n"
           "You can try the [list] command."
         ).format(target_title),
-        force=True
+        tweet.id,
+        tweet.user.screen_name
       )
     else:
-      tid = core.tweet_reply(
-        tweet.id,
-        tweet.user.name,
+      tid = core.tweet_long(
         story.format_node(st.nodes[st.start]),
-        force=True
+        tweet.id,
+        tweet.user.screen_name
       )
       core.db.begin_telling(tid, sender, st.name)
 
   # TODO: More commands here?
   else:
     # TODO: Log failure
-    core.tweet_reply(
+    core.tweet_long(
+      "Sorry, I don't know what '{}' means. Try 'help'?".format(
+        strip_handles(command)
+      ),
       tweet.id,
-      tweet.user.name,
-      "CommandError: unrecognized command '{}'".format(strip_handles(command)),
-      force=True
+      tweet.user.screen_name
     )
 
 PROCESSING_TOTAL = 0
@@ -191,7 +206,7 @@ def main():
     global PROCESSING_TOTAL
     nonlocal core
     print("From: {}\nContent: {}".format(tw.user.screen_name, tw.text))
-    sender = tw.user.name
+    sender = tw.user.screen_name
     if tw.in_reply_to_status_id != None: # a reply to a tweet
       replying_to = tw.in_reply_to_status_id
       rec = core.db.recall_telling(replying_to)
@@ -203,21 +218,43 @@ def main():
       handle_general_command(core, tw, sender)
     PROCESSING_TOTAL += 1
 
+  # Set up our tweet handler:
+  core.register_handler(handle_mention)
+
+  # Start processing tweets:
+  print("Initiating streaming connection...")
   try:
+    backoff = 65
     while True:
-      PROCESSING_TOTAL = 0
+      go = time.time()
       try:
-        core.handle_mentions(handle_mention)
+        core.stream_user_tweets(config.MY_HANDLE)
+      except tweepy.TweepError as e:
+        if e.api_code == 187:
+          # A duplicate message post; manually increment counter and re-try.
+          core.incremenet_counter()
+          print("\n...immediate retry after duplicate error...")
+          continue
       except Exception as e:
-        print("..error processing mentions; retrying next cycle...")
+        print("\n...error streaming tweets; retrying after backoff...")
         if config.DEBUG:
           print(e, file=sys.stderr)
           traceback.print_tb(e.__traceback__, file=sys.stderr)
-
-      print("Processed {} total mentions.".format(PROCESSING_TOTAL))
-      time.sleep(3)
+      elapsed = time.time() - go
+      if elapsed < backoff*3:
+        backoff *= 2
+      else:
+        backoff = 65
+      print("\n...backing off for {} seconds...".format(backoff))
+      left = backoff
+      while left > 0:
+        print("  ...{} seconds remaining...".format(left), end="\r")
+        time.sleep(1)
+        left -= 1
+      print("\n...retrying connection now...")
   except KeyboardInterrupt as e:
     print("\nShutting down.")
+
   core.shutdown()
 
 

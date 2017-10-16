@@ -19,3 +19,7 @@ STATE_STRUCTURE = {
 }
 
 STORIES_DIRECTORY = "stories"
+
+NTAG_SIZE = 4
+
+TAGCHARS = "-_/\\|'\"[]{}()+=<>,.!$%^&*~`ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
