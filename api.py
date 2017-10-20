@@ -139,9 +139,11 @@ class TwitterAPI(tweepy.StreamListener):
     l = len(config.TAGCHARS)
     n %= l**config.NTAG_SIZE
     tag = config.TAGCHARS[n%l]
+    ofs = 0
     for i in range(config.NTAG_SIZE-1):
+      ofs += 7
       n //= l
-      tag += config.TAGCHARS[n%l]
+      tag += config.TAGCHARS[(n+ofs)%l]
     return tag
 
   def format_into_messages(self, content, reply_at=None, start=0):
