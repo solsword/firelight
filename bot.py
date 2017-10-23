@@ -23,41 +23,6 @@ from packable import pack, unpack
 def strip_handles(message):
   return re.sub('@', r'@\\', message)
 
-def get_tokens(filename=config.DEFAULT_TOKENS_FILE):
-  """
-  Gets authentication tokens.
-  """
-  if not os.path.isfile(filename):
-    print("Couldn't find authentication file '{}'.".format(filename))
-  with open(filename, 'r') as fin:
-    tokens = json.load(fin)
-  return tokens
-
-def load_stories(core, directory):
-  """
-  Loads stories into the database of the given core API object from files
-  ending in '.fls'. Prints warnings for unloadable files and duplicate titles,
-  skipping affected files/stories.
-  """
-  for dirpath, dirnames, filenames in os.walk(directory):
-    for f in filenames:
-      if f.endswith(".fls"):
-        with open(os.path.join(dirpath, f), 'r') as fin:
-          try:
-            st = unpack(json.loads(fin.read()), story.Story)
-          except Exception as e:
-            print(
-              "Warning: file '{}' could not be read as a Story.".format(
-                os.path.join(dirpath, f)
-              )
-            )
-            if config.DEBUG:
-              print(e, file=sys.stderr)
-              traceback.print_tb(e.__traceback__, file=sys.stderr)
-            continue # continue to the next file
-
-          core.db.save_new_story(st)
-
 def handle_story_reply(core, tweet, in_reply_to, sender, current_state):
   """
   Given an API object (core), a tweet object, an in_reply_to ID that the tweet
@@ -66,7 +31,7 @@ def handle_story_reply(core, tweet, in_reply_to, sender, current_state):
   response. This method handles tweets that are replies to tweets with valid
   story states, generally delegating much of that work to story.Story.advance.
   """
-  reader, story, node, state, is_head = current_state
+  reader, title, author, node, state, is_head = current_state
 
   # Check sender identity:
   if sender != reader:
@@ -81,11 +46,13 @@ def handle_story_reply(core, tweet, in_reply_to, sender, current_state):
     return
 
   # Recall the story being responded to:
-  st = core.db.recall_story(story)
+  st = core.db.recall_story(author, title)
   if not st:
     core.tweet_long(
-      "Sorry, I've forgotten the story '{}'. Something is wrong :(".format(
-        story
+      "Sorry, I've forgotten the story '{}' by '{}'. Something is wrong :("
+      .format(
+        title,
+        author
       ),
       reply_to=tweet.id,
       reply_at=tweet.user.screen_name,
@@ -125,15 +92,18 @@ def handle_general_command(core, tweet, sender):
   to story tweets, and which are thus interpreted as general commands. Besides
   the tweet object, requires an API (core) and a sender name.
   """
-  chunks = tweet.text.strip().split()
+  raw = tweet.text.strip()
+  if '#' in raw:
+    raw = raw[:raw.index('#')]
+  chunks = raw.split()
   command = chunks[0].lower()
-  args = tweet.text.strip()[len(command):].strip()
+  args = raw[len(command):].strip()
   if command == "@{}".format(config.MY_HANDLE):
     command = chunks[1].lower()
-    args = tweet.text.strip()[len(chunks[0]) + len(command) + 1:].strip()
+    args = raw[len(chunks[0]) + len(command) + 1:].strip()
 
   if command in ("help", "[help]"):
-    st = core.db.recall_story("help")
+    st = core.db.recall_story(None, "help")
     if not st:
       core.tweet_long(
         "Sorry, there's no help available.",
@@ -149,7 +119,6 @@ def handle_general_command(core, tweet, sender):
       core.db.begin_telling(tid, sender, "help")
 
   elif command in ("list", "[list]"):
-    # TODO: automatic tweet breaking
     core.tweet_long(
       [
         "Okay, here are all the stories that I know:",
@@ -160,29 +129,49 @@ def handle_general_command(core, tweet, sender):
     )
 
   elif command in ("tell", "[tell]"):
+    # TODO: Get author info here and disambiguate!
     target_title = args.strip().lower()
-    st = core.db.recall_story(target_title)
+    st = core.db.recall_story(None, target_title)
+    respond_to = tweet.id
     if not st:
-      # TODO: Find nearest matches?
+      sl = [ title for (title, author) in core.db.story_list() ]
+      # Search for near-matches:
+      best_match = story.fuzzy_match(
+        target_title,
+        sl,
+        cutoff=config.TITLE_DISTANCE_THRESHOLD
+      )
+      if best_match[0] != None:
+        st = core.db.recall_story(None, best_match[0])
+        respond_to = core.tweet_long(
+          "Ah, you must mean '{}.' Yes, I remember that tale...".format(
+            best_match[0].title()
+          ),
+          respond_to,
+          tweet.user.screen_name
+        )
+
+    if not st:
+      # Nothing even close:
       core.tweet_long(
         (
           "Sorry, I don't know a story called '{}'.\n"
-          "You can try the [list] command."
-        ).format(target_title),
-        tweet.id,
+          "If you want, I can [list] the stories I know."
+        ).format(target_title.title()),
+        respond_to,
         tweet.user.screen_name
       )
     else:
       tid = core.tweet_long(
         story.format_node(st.nodes[st.start]),
-        tweet.id,
+        respond_to,
         tweet.user.screen_name
       )
-      core.db.begin_telling(tid, sender, st.name)
+      core.db.begin_telling(tid, sender, st.title)
 
   # TODO: More commands here?
   else:
-    # TODO: Log failure
+    # TODO: Log failure?
     core.tweet_long(
       "Sorry, I don't know what '{}' means. Try 'help'?".format(
         strip_handles(command)
@@ -198,9 +187,8 @@ def main():
   The main loop of the bot.
   """
   global PROCESSING_TOTAL
-  tk = get_tokens()
+  tk = api.get_tokens()
   core = api.TwitterAPI(tk)
-  load_stories(core, config.STORIES_DIRECTORY)
 
   def handle_mention(tw):
     global PROCESSING_TOTAL
@@ -253,6 +241,8 @@ def main():
         left -= 1
       print("\n...retrying connection now...")
   except KeyboardInterrupt as e:
+  # TODO: Get rid of this
+  #except ValueError as e:
     print("\nShutting down.")
 
   core.shutdown()

@@ -1,5 +1,6 @@
 {
-  "name": "help",
+  "title": "help",
+  "author": "Peter Mawhorter",
   "start": "help",
   "nodes": {
     "help": {

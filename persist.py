@@ -70,7 +70,7 @@ class Storage:
         {}
       );
       """.format(
-        "\n  ".join(
+        ",\n  ".join(
           "{} {}".format(key, config.STATE_STRUCTURE[key])
             for key in config.STATE_STRUCTURE
         )
@@ -80,7 +80,11 @@ class Storage:
     # Insert an empty row into our state table if it's empty:
     cur.execute("SELECT Count(*) from state;")
     if cur.fetchone()[0] == 0:
-      cur.execute("INSERT INTO state VALUES(0);")
+      cur.execute(
+        "INSERT INTO state VALUES({});".format(
+          ", ".join("0" for i in range(len(config.STATE_STRUCTURE)))
+        )
+      )
 
     cur.execute(
       """
@@ -88,6 +92,7 @@ class Storage:
         tweet INTEGER PRIMARY KEY,
         reader TEXT NOT NULL,
         story TEXT NOT NULL,
+        author TEXT NOT NULL,
         node TEXT NOT NULL,
         state TEXT NOT NULL,
         is_head BOOLEAN NOT NULL
@@ -99,6 +104,7 @@ class Storage:
       """
       CREATE TABLE IF NOT EXISTS stories(
         title TEXT NOT NULL,
+        author TEXT NOT NULL,
         package TEXT NOT NULL
       );
       """
@@ -136,28 +142,38 @@ class Storage:
     value = row[key]
     return value
 
-  def save_new_story(self, story):
+  def save_new_story(self, story, force=False):
     """
     Saves a new story to the database. Returns True if it succeeds, or False
     (and prints a warning message) if a story by that title already exists.
+    Always returns true and replaces any existing story if 'force' is True.
     """
     cur = self.connection.cursor()
-    title = story.name.lower()
-    cur.execute("SELECT * FROM stories WHERE title = ?;", (title,))
+    title = story.title.lower()
+    author = story.author.title()
+    cur.execute(
+      "SELECT * FROM stories WHERE title = ? AND author = ?;", (title, author)
+    )
     if len(cur.fetchall()) > 0:
-      print(
-        "Warning: attempted to save new story with duplicate title '{}'."
-        .format(
-          title
-        ),
-        file=sys.stderr
-      )
-      return False
+      if force:
+        self.update_story(story)
+      else:
+        print(
+          (
+            "Warning: attempted to save new story by '{}' "
+            "with duplicate title '{}'."
+          ).format(
+            author,
+            title
+          ),
+          file=sys.stderr
+        )
+        return False
 
     # TODO: maximize packing efficiency
     cur.execute(
-      "INSERT INTO stories(title, package) values(?, ?);",
-      ( title, json.dumps(pack(story)) )
+      "INSERT INTO stories(title, author, package) values(?, ?, ?);",
+      ( title, author, json.dumps(pack(story)) )
     )
 
     self.connection.commit()
@@ -170,53 +186,65 @@ class Storage:
     cur = self.connection.cursor()
     # TODO: maximize packing efficiency
     cur.execute(
-      "UPDATE stories SET package = ? WHERE title = ?;",
-      ( json.dumps(pack(story)), story.name.lower() )
+      "UPDATE stories SET package = ? WHERE title = ? AND author = ?;",
+      ( json.dumps(pack(story)), story.title.lower(), story.author.title() )
     )
     # TODO: Error handling here
     self.connection.commit()
 
-  def recall_story(self, title):
+  def recall_story(self, title, author=None):
     """
     Looks up a story in the database and returns it, or None if no such story
-    exists.
+    exists. If multiple stories match (when author is given as None), a list
+    will be returned.
+    # TODO: THIS?!?
     """
     cur = self.connection.cursor()
-    cur.execute(
-      "SELECT package FROM stories WHERE title = ?;",
-      (title.lower(),)
-    )
+    if author is None:
+      cur.execute(
+        "SELECT package FROM stories WHERE title = ?;",
+        ( title.lower(), )
+      )
+    else:
+      cur.execute(
+        "SELECT package FROM stories WHERE title = ? AND author = ?;",
+        ( title.lower(), author.title() )
+      )
     rows = cur.fetchall()
     if len(rows) < 1:
       return None
 
-    return unpack(json.loads(rows[0]["package"]), Story)
+    if len(rows) > 1:
+      return [ unpack(json.loads(r["package"]), Story) for r in rows ]
+    else:
+      return unpack(json.loads(rows[0]["package"]), Story)
 
   def story_list(self):
     """
-    Returns a list of all known story titles (each in lower case).
+    Returns a list of all known story titles/authors (returned as pairs).
     """
     cur = self.connection.cursor()
-    cur.execute("SELECT title FROM stories;")
-    return [row["title"] for row in cur.fetchall()]
+    cur.execute("SELECT title, author FROM stories;")
+    return [ (row["title"], row["author"]) for row in cur.fetchall()]
 
-  def begin_telling(self, tweet, reader, title):
+  def begin_telling(self, tweet, reader, author, title):
     """
     Creates a new telling in the database starting at the start node of the
     given story with the default starting state.
     """
     cur = self.connection.cursor()
-    story = self.recall_story(title)
+    story = self.recall_story(author, title)
     # Create a new story for this reader and return its ID.
     cur.execute(
       (
-        "INSERT INTO tellings(tweet, reader, story, node, state, is_head) "
-        "values(?, ?, ?, ?, ?, ?);"
+        "INSERT INTO tellings(tweet, reader, story, author, node, state, "
+        "is_head) VALUES(?, ?, ?, ?, ?, ?, ?);"
       ),
       (
         tweet,
         reader,
-        story.name,
+        story.title.lower(),
+        story.author.title(),
         story.start,
         json.dumps( story.initial_state() ),
         True
@@ -234,8 +262,8 @@ class Storage:
     cur = self.connection.cursor()
     cur.execute(
       (
-        "INSERT INTO tellings(tweet, reader, story, node, state, is_head) "
-        "SELECT ?, reader, story, ?, ?, 1 FROM tellings "
+        "INSERT INTO tellings(tweet, reader, story, author, node, state, "
+        "is_head) SELECT ?, reader, story, author, ?, ?, 1 FROM tellings "
         "WHERE tweet = ?;"
       ),
       (
@@ -254,14 +282,14 @@ class Storage:
   def recall_telling(self, tweet):
     """
     Fetches the story state for the given tweet. If no such state exists,
-    returns None. Returns a tuple of reader, story_name, story_node,
-    story_state, and is_head. The story state JSON will be unpacked into a
-    simple Python object.
+    returns None. Returns a tuple of reader, story_title, story_author,
+    story_node, story_state, and is_head. The story state JSON will be unpacked
+    into a simple Python object.
     """
     cur = self.connection.cursor()
     cur.execute(
       """
-SELECT reader, story, node, state, is_head
+SELECT reader, story, author, node, state, is_head
 FROM tellings WHERE tweet = ?;
       """,
       (tweet,)
@@ -273,6 +301,7 @@ FROM tellings WHERE tweet = ?;
       return (
         row["reader"],
         row["story"],
+        row["author"],
         row["node"],
         json.loads(row["state"]),
         row["is_head"]

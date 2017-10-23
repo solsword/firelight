@@ -8,16 +8,27 @@ with twitter directly.
 import copy
 import re
 
+import editdistance
+
 from state import StateChange
 
 from packable import pack, unpack
 from diffable import diff
 
 
+def cmd_title(story, node_name, state):
+  return (
+    [
+      "This story is '{}', by {}.".format(story.title.title(), story.author)
+    ],
+    node_name,
+    state
+  )
+
 # TODO: these
 STORY_COMMANDS = {
-  "/title/": None,
-  "/status/": None
+  "/title/": cmd_title,
+  "/author/": cmd_title,
 }
 
 def format_node(node, highlight="bracket"):
@@ -41,6 +52,22 @@ def format_node(node, highlight="bracket"):
         content
       )
   return content
+
+
+def fuzzy_match(target, options, cutoff=None):
+  """
+  Returns the best fuzzy match for the given target string against the given
+  list of options. Returns a pair (match, edit_distance), using (None, -1) if
+  an empty list is given, or if a cutoff is given and the minimum edit distance
+  is greater than the cutoff.
+  """
+  best = (None, -1)
+  for op in options:
+    ed = editdistance.eval(target, op)
+    if (best[1] < 0 and (cutoff is None or ed <= cutoff)) or ed < best[1]:
+      best = (op, ed)
+
+  return best
 
 
 class StoryNode:
@@ -171,12 +198,15 @@ class StoryNode:
 
 class Story:
   """
-  A Story is just a constellation of StoryNodes, 
+  A Story is just a constellation of StoryNodes with an author, a title, and
+  some default initial state.
   """
-  def __init__(self, name, start, nodes):
-    self.name = name
+  def __init__(self, title, author, start, nodes, setup=None):
+    self.title = title
+    self.author = author
     self.start = start
     self.nodes = nodes
+    self.setup = setup or {}
     if self.start not in self.nodes:
       raise ValueError(
         "Start node '{}' not found among story nodes.".format(self.start)
@@ -184,7 +214,8 @@ class Story:
 
   def __hash__(self):
     return (
-      hash(self.name) * 17
+      hash(self.title) * 17
+    + hash(self.author) * 5
     + hash(self.start) * 11
     + sum(hash(n) * (3+i) for i, n in enumerate(self.nodes.values()))
   )
@@ -192,21 +223,25 @@ class Story:
   def __eq__(self, other):
     if not isinstance(other, Story):
       return False
-    if self.name != other.name:
+    if self.title != other.title:
+      return False
+    if self.author != other.author:
       return False
     if self.nodes != other.nodes:
       return False
     return True
 
   def _diff_(self, other):
-    if self.name != other.name:
-      return ["names ('{}' =/= '{}')".format(self.name, other.name)]
+    if self.title != other.title:
+      return ["titles ('{}' =/= '{}')".format(self.title, other.title)]
+    if self.author != other.author:
+      return ["authors ('{}' =/= '{}')".format(self.author, other.author)]
     if self.nodes != other.nodes:
       return ["nodes: {}".format(d) for d in diff(self.nodes, other.nodes)]
     return []
 
   def __str__(self):
-    return "Story('{}')".format(self.name)
+    return "Story('{}')".format(self.title)
 
   def _pack_(self):
     """
@@ -216,6 +251,7 @@ class Story:
     ```
     Story(
       "The Ocean Calls",
+      "Anonymous",
       "at_the_beach",
       {
         "at_the_beach":
@@ -244,7 +280,8 @@ class Story:
     )
     ```
     {
-      "name": "The Ocean Calls",
+      "title": "The Ocean Calls",
+      "author": "Anonymous",
       "start": "at_the_beach",
       "nodes": {
         "at_the_beach": {
@@ -267,23 +304,30 @@ class Story:
     }
     ```
     """
-    return {
-      "name": self.name,
+    result = {
+      "title": self.title,
+      "author": self.author,
       "start": self.start,
       "nodes": pack(self.nodes)
     }
+    if self.setup:
+      result["setup"] = self.setup
+
+    return result
 
   def _unpack_(obj):
     """
     Creates a StoryNode from a simple object (see packable.py).
     """
     return Story(
-      obj["name"],
+      obj["title"],
+      obj["author"],
       obj["start"],
       {
         k: unpack(obj["nodes"][k], StoryNode)
           for k in obj["nodes"]
-      }
+      },
+      setup=obj["setup"] if "setup" in obj else None
     )
 
   def get(self, node_name):
@@ -296,11 +340,11 @@ class Story:
     """
     Returns the initial state for the this story.
     """
-    # TODO: More fancy here
-    return {
-      "_name_": self.name,
-      "_status_": "beginning"
-    }
+    result = copy.deepcopy(self.setup)
+    result["_title_"] = self.title
+    result["_author_"] = self.author
+    result["_status_"] = "beginning"
+    return result
 
   def advance(self, node_name, state, decision, highlight="bracket"):
     """
@@ -315,7 +359,7 @@ class Story:
         [
           "Sorry, I've gotten confused at '{}' in '{}'.".format(
             node_name,
-            self.name
+            self.title
           ),
           "Starting over from the beginning.",
           format_node(self.nodes[self.start], highlight=highlight)
@@ -333,23 +377,25 @@ class Story:
       )
 
     if decision.lower() in STORY_COMMANDS:
-      # TODO: What here?
+      cmd = STORY_COMMANDS[decision.lower()]
+      responses, new_node, new_state = cmd(self, node_name, state)
       return (
-        [ "Command {}.".format(decision) ],
-        node_name,
-        state
+        responses,
+        new_node,
+        new_state
       )
 
-    matching_key = None
-    for k in node.successors:
-      if k.lower() == decision.lower():
-        matching_key = k
+    matching_key, _ = fuzzy_match(
+      decision.lower(),
+      [ k.lower() for k in node.successors.keys() ],
+      cutoff=config.ACTION_DISTANCE_THRESHOLD
+    )
 
     if matching_key is None:
       # TODO: Better here?
       return (
         [
-          "'{}' is not a valid decision at this point in the story.".format(
+          "I'm not sure what you mean by '{}'.".format(
             decision.lower()
           ),
           format_node(node, highlight=highlight)

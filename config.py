@@ -15,14 +15,19 @@ DEFAULT_TOKENS_FILE = "tokens"
 DB_FILE = "firelight.db"
 
 STATE_STRUCTURE = {
-  "last_processed_mention": "INTEGER"
+  "last_processed_mention": "INTEGER",
+  "unique_counter": "INTEGER",
 }
 
 STORIES_DIRECTORY = "stories"
 
+TITLE_DISTANCE_THRESHOLD = 6
+
+ACTION_DISTANCE_THRESHOLD = 4
+
 NTAG_SIZE = 4
 
-TAGCHARS = "-_/\\|'\"[]{}()+=<>,.!$%^&*~`ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+#TAGCHARS = "-_/\\|'\"[]{}()+=<>,.!$%^&*~`ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 TAGCHARS = [
   chr(x) for x in [

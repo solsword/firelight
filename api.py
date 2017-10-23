@@ -4,6 +4,9 @@ api.py
 Core internal API for twitter access. Maps actions to tweepy calls.
 """
 
+import os
+import json
+
 import tweepy
 import persist
 
@@ -25,6 +28,16 @@ DISCONNECT_CODES = {
   12: "Shed load",
 }
 
+def get_tokens(filename=config.DEFAULT_TOKENS_FILE):
+  """
+  Gets authentication tokens.
+  """
+  if not os.path.isfile(filename):
+    print("Couldn't find authentication file '{}'.".format(filename))
+  with open(filename, 'r') as fin:
+    tokens = json.load(fin)
+  return tokens
+
 class TwitterAPI(tweepy.StreamListener):
   def __init__(self, tokens):
     self.auth = tweepy.OAuthHandler(
@@ -35,7 +48,7 @@ class TwitterAPI(tweepy.StreamListener):
     self.api = tweepy.API(self.auth)
     self.db = persist.Storage()
     self.handlers = []
-    self.global_counter = 0
+    self.global_counter = self.db.load_state("unique_counter")
 
   def register_handler(self, fcn):
     """
@@ -124,18 +137,19 @@ class TwitterAPI(tweepy.StreamListener):
 
   def incremenet_counter(self):
     """
-    Method for incrementing the global counter just-in-case.
+    Method for incrementing the global counter which saves it to the database.
     """
     self.global_counter += 1
+    self.db.save_state("unique_counter", self.global_counter)
 
-  def ntag(self, n):
+  def ntag(self):
     """
-    Turns a number into an N-character tag. Overflows wrap. Uses and increments
-    the global counter.
+    Spits out a numeric tag. Overflows wrap. Uses and increments the global
+    counter.
     """
     # TODO: We need a more robust solution, as this is exploitable!
-    n += self.global_counter
-    self.global_counter += 1
+    n = self.global_counter
+    self.incremenet_counter()
     l = len(config.TAGCHARS)
     n %= l**config.NTAG_SIZE
     tag = config.TAGCHARS[n%l]
@@ -146,28 +160,26 @@ class TwitterAPI(tweepy.StreamListener):
       tag += config.TAGCHARS[(n+ofs)%l]
     return tag
 
-  def format_into_messages(self, content, reply_at=None, start=0):
+  def format_into_messages(self, content, reply_at=None):
     """
     Takes arbitrary-length content (possibly in reply to a specific user) and
     formats it into a series of tweetable chunks, each of which includes a
     count tag to help avoid duplicate status problems.
     """
     leftovers = content
-    n = start
     results = []
     while leftovers:
-      tw, leftovers = self.format_first_message(content, reply_at, n)
-      n += 1
+      tw, leftovers = self.format_first_message(leftovers, reply_at)
       results.append(tw)
 
     return results
 
-  def format_first_message(self, content, reply_at=None, number=0):
+  def format_first_message(self, content, reply_at=None):
     """
     Takes content and formats part of it into a tweet, returning that tweet
     text and any leftover text as a pair.
     """
-    ntag = " " + self.ntag(number)
+    ntag = " " + self.ntag()
     rtag = ""
     if reply_at:
       rtag = "@{} ".format(reply_at)

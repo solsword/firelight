@@ -3,3 +3,8 @@
 A twitter bot for interactive storytelling on the web.
 
 Author: Peter Mawhorter (pmawhorter+gatherround@gmail.com)
+
+## Dependencies:
+
+- Tweepy ~ 3.5 [pip=tweepy;pacman=python-tweepy]
+- editdistance ~ 0.3 [pip=editdistance;aur=python-editdistance]
