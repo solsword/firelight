@@ -1,0 +1,70 @@
+{
+  "title": "Seven Cities",
+  "author": "Peter Mawhorter",
+  "start": "Sol",
+  "nodes": {
+    "Sol": {
+      "name": "Sol",
+      "content":
+"The city of Sol stretches endlessly in four directions, bathed in heat above and scoured by the void below. Its glistening surface plates have been continually replaced for æons, absorbing the warmth of a captive sun. Deep in their cocoon of metal and robotic activity, the inhabitants spin dreams for each other to pass the time, the stability of their situation surpassed only by its isolation. How can a trillion lives feel lonely?\n\nAhead, you see the replica house you'd been searching for, door marked by a knob so out-of-place in this metropolis. What other ancient accoutrements might be on display inside? But your lens beeps suddenly, pulsing with an invitation. Your friend is dreaming, and an entire world awaits.",
+      "successors": {
+        "knob": "LosAngeles",
+        "dreaming": "Artheria"
+      }
+    },
+    "LosAngeles": {
+      "name": "LosAngeles",
+      "content":
+"Asphalt swelters in the heat as you stand before a run-down bungalow, dry grass out front struggling to cover the corners of the yard. Behind you, skyscrapers tower, their glassy angles defining space on this hazy plain between the mountains and the sea. Los Angeles is all around you, and its sound is the sound of traffic. That muted roar oozes from the nearby freeway overpass, endemic to this city suffused with congested motion.\n\nThe overpass casts an invitingly dark shadow, promising respite from the harsh sunlight. At the other end of the street, bungalows give way to warehouses, and a gate hangs slightly ajar in a chain-link fence.",
+      "successors": {
+        "gate": "Orr",
+        "shadow": "Heras"
+      }
+    },
+    "Artheria": {
+      "name": "Artheria",
+      "content":
+"More fake than real, the grand city Artheria encompasses miles of cobbled streets, back alleys, and bright wooden houses, with all the right details to sustain a shared fantasy of a living world. NPCs passing on the street mumble dialog that betrays the emptiness of their minds much as the façades are wrapped around featureless coordinate space. Yet underneath the false appearances, a real community does thrive, in the auction houses and guild-halls where players engage with each other. Here online, away from the obligations of physical form and shrouded in anonymity, a second culture grows, kinder in some ways but uglier in others. Around you in a busy market square, colorful pennants and fanciful costumes strive to multiply the sensation of the floating icons that mark your peers.\n\nAhead, a massive gate stands open to all, carts flowing through to keep up appearances. Of course, in the corner of your eye, the 'Log Out' button lingers, threshold to an entirely different experience.",
+      "successors": {
+        "gate": "Heras",
+        "button": "Maridia"
+      }
+    },
+    "Orr": {
+      "name": "Orr",
+      "content":
+"The sinking sun's heavy rays struggle through the thick air to outline the mechanical skyline of Orr. Smog seeps from innumerable towers as if its presence were vital to the city's survival. The vast sprawl of processing and storage facilities seems antithetical to its inhabitants; their lives collectively instrumental but individually incidental. Living space has been carved out from the tangle almost reluctantly, as the population struggles for the privilege of struggling. Perched on a catwalk above a refinery, you are surrounded on all sides by the machinery which seems to have made humans its subjects.\n\nThe bridge you are on leads to a control room where a glowing computer appears unattended. Behind, an iron doorway frames a staircase that spirals down into the plant below.",
+      "successors": {
+        "computer": "Artheria",
+        "staircase": "Sol"
+      }
+    },
+    "Heras": {
+      "name": "Heras",
+      "content":
+"You find yourself surrounded by a leafy silence in Heras, the city of trees. Weathered stones stacked into columns or arches persist here and there, but the intricate architecture of roots and vines overwhelms their presence with its own green logic. This city might appear ruined to some, but to the trees it has simply been rebuilt. Where markets once flourished a different bustle persists, embodied in the humming of insects and the silent flow of sap. The trees relate to each other, through hidden mycelia and intertwined roots, with bees as their messengers. All around them, a host of other life flashes by, but the trees measure time in seasons, not days.\n\nUnder the susurrating canopy, a deep pool catches your eye, its flat surface hinting at unknown depths. Beyond it, you can sense a vague brightness and a vast unseen expanse.",
+      "successors": {
+        "pool": "Maridia",
+        "expanse": "Braighmuire"
+      }
+    },
+    "Maridia": {
+      "name": "Maridia",
+      "content":
+"Beneath the waves, Maridia extends along a sunlit shelf, perfectly situated as a hub for interspecies commerce. Among the shadows of the trading vessels moored above, the delicate coral architecture of the merfolk is interspersed with the geodesic bubbles of the land-dwellers, air tubes swaying alongside kelp fronds in the currents. Bubbles rise from the divers who swim out to socialize and trade, while many of the merfolk spend time near the surface, half-submerged transducers bridging gossip and stories between the air and water.\n\nNearby, an air-lock opens, admitting some divers into the sunlit waters and inviting those nearby to enter. As you turn towards it, the rolling hills of sea-grass seem to beckon.",
+      "successors": {
+        "air-lock": "Sol",
+        "hills": "Braighmuire"
+      }
+    },
+    "Braighmuire": {
+      "name": "Braighmuire",
+      "content":
+"A strong breeze whips through manes and scarves as it flows across the heather-clad hills, joining together the distant citizens of Braighmuire. The group you're travelling with pushes on, headed for tonight's promised encampment with three other bands as the sun begins to mellow. Though not as visible as the huddled stone buildings of the lowlanders, the trails and campsites of the highlands form an architecture that shapes commerce and community among a thriving populace. Wool tents provide ample shelter from the wind and rain, and markets spring up daily as bands meet and part ways with the cycle of the seasons. Following a shaggy highland mare past cairn after cairn, you have become part of a society distributed across a continent.\n\nCresting another hill, you see a smithy nestled by a stream in the valley below, a thin line of smoke winding upwards from the lonely building. As your group begins their descent, a path branches away around the hill towards the late-afternoon sun.",
+      "successors": {
+        "smithy": "Orr",
+        "path": "LosAngeles"
+      }
+    }
+  }
+}
