@@ -1,41 +1,41 @@
-% title: Mushroom Hunting
+% title: Mushrooms in Autumn
 % author: Peter Mawhorter
 % start: trail
-% state: {
-  "lost": 0,
-  "worry": 0,
-  "properties": {
-    "smoky-polypore": "inedible",
-    "bears-head-tooth": "choice",
-    "turkey-tail": "inedible",
-    "diamond-polypore": "too-old",
-    "": ""
-  },
-  "inventory-descriptions": {
-    "spade": "Your trusty spade."
-    "bears-head-tooth": "A shaggy mass of branching white tendrils with brownish tips."
-    "smoky-polypore": "Several leathery strips of fungus ripped from their base, white on top and dark gray on the bottom.",
-    "turkey-tail": "Several pretty striped brown frills with white edges, still clinging to a few pieces of dead bark.",
-    "diamond-polypore": "A few creamy-yellow trumpet-shaped mushrooms with delicate white honeycomb-lattice frills beneath.",
-    "": ""
-  },
-  "inventory-categories": {
-    "spade": "tool",
-    "bears-head-tooth": "mushroom",
-    "smoky-polypore": "mushroom",
-  },
-  "inventory": [
-    { "id": "spade", "count": 1 }
-  ]
-}
 % note: Mushroom placement and appearances based on the "Field Guide to Common
-% Macrofungi in Eastern Forests and their Ecosystem Functions" by Ostry,
-% Anderson, and O'Brien of the United States Department of Agriculture Forest
-% Service (General Technical Report NRS-79)
-% General disclaimer: This is a work of fiction and is not intended to aid in
-% identifying edible mushrooms. NEVER eat a mushroom unless you are absolutely
-% certain it is not poisonous, as many edible species look very similar to
-% poisonous ones, and as a result fatal poisonings occur worldwide every year.
+%   Macrofungi in Eastern Forests and their Ecosystem Functions" by Ostry,
+%   Anderson, and O'Brien of the United States Department of Agriculture Forest
+%   Service (General Technical Report NRS-79) General disclaimer: This is a
+%   work of fiction and is not intended to aid in identifying edible mushrooms.
+%   NEVER eat a mushroom unless you are absolutely certain it is not poisonous,
+%   as many edible species look very similar to poisonous ones, and as a result
+%   fatal poisonings occur worldwide every year.
+% state: {
+%  "lost": 0,
+%  "worry": 0,
+%  "properties": {
+%    "smoky-polypore": "inedible",
+%    "bears-head-tooth": "choice",
+%    "turkey-tail": "inedible",
+%    "diamond-polypore": "too-old",
+%    "": ""
+%  },
+%  "inventory-descriptions": {
+%    "spade": "Your trusty spade."
+%    "bears-head-tooth": "A shaggy mass of branching white tendrils with brownish tips."
+%    "smoky-polypore": "Several leathery strips of fungus ripped from their base, white on top and dark gray on the bottom.",
+%    "turkey-tail": "Several pretty striped brown frills with white edges, still clinging to a few pieces of dead bark.",
+%    "diamond-polypore": "A few creamy-yellow trumpet-shaped mushrooms with delicate white honeycomb-lattice frills beneath.",
+%    "": ""
+%  },
+%  "inventory-categories": {
+%    "spade": "tool",
+%    "bears-head-tooth": "mushroom",
+%    "smoky-polypore": "mushroom",
+%  },
+%  "inventory": [
+%    { "id": "spade", "count": 1 }
+%  ]
+%}
 
 # trail
 
