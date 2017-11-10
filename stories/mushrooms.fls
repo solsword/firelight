@@ -11,7 +11,7 @@
 %   fatal poisonings occur worldwide every year.
 % state: {
 %  "lost": 0,
-%  "worry": 0,
+%  "worry": 0, `` TODO: Use this value!
 %  "properties": {
 %    "smoky-polypore": "inedible",
 %    "bears-head-tooth": "choice",
@@ -49,9 +49,9 @@
 (again:
   (if:
   | lost = 0: ``no extra text in this case
-  | lost < 3: You've found your way back. (set: lost = 0)
-  | lost < 6: You've found the trail again. For a moment there, you were worried. (set: lost = 0)
-  | else: Finally, you've found the trail again! Now that you're back, you wonder how you were ever lost. (set: lost = 0)
+  | lost < 3: You've found your way back. (set: lost | 0)
+  | lost < 6: You've found the trail again. For a moment there, you were worried. (set: lost | 0)
+  | else: Finally, you've found the trail again! Now that you're back, you wonder how you were ever lost. (set: lost | 0)
   )
 )
 
@@ -61,13 +61,13 @@ the scent of wet earth on a faint trail through the hills.
 (once: You're here for mushrooms, and after a few days of rain, you don't
 expect to be disappointed.
 
-[[Uphill|birch|You hike uphill away from the trail.(set: lost + 1)]] from you, a stand of birch an aspen dominates the hilltop.
+[[Uphill|birch|You hike uphill away from the trail.(add: lost | 1)]] from you, a stand of birch an aspen dominates the hilltop.
 
-At the bottom of the hill, a depression has developed into a small [[bog||You set off downhill away from the trail, losing your vantage point as you descend.(set: lost + 2)]].
+At the bottom of the hill, a depression has developed into a small [[bog||You set off downhill away from the trail, losing your vantage point as you descend.(add: lost | 2)]].
 
-Ahead of you, a few [[pines|pine|You walk a short distance to the pines, leaving the trail as it twists away uphill.(set: lost + 1)]] proudly retain their needles.
+Ahead of you, a few [[pines|pine|You walk a short distance to the pines, leaving the trail as it twists away uphill.(add: lost | 1)]] proudly retain their needles.
 
-Of course, you could just start searching among the oaks and maples right [[here|oak|You wander a short distance from the trail.(set: lost + 1)]]
+Of course, you could just start searching among the oaks and maples right [[here|oak|You wander a short distance from the trail.(add: lost | 1)]]
 )
 
 (again:
@@ -108,10 +108,10 @@ Finally back in the warmth of your apartment, you strip off your coat and boots 
 
 # oak
 
-Surrounded by majestic hardwoods at the peak of their fall colors, it takes effort not to be distracted by the scenery. Lying about amidst the oaks and maples are some fallen [[trunks|oak-logs|(set: lost + 1)]], the perfect substrate for a few different types of fungus. You could instead look on the standing [[trees|oak-trunks|(set: lost + 1)]] themselves, or among the leaf-[[litter|oat-litter|(set:lost + 1)]] between their roots.
+Surrounded by majestic hardwoods at the peak of their fall colors, it takes effort not to be distracted by the scenery. Lying about amidst the oaks and maples are some fallen [[trunks|oak-logs|(add: lost | 1)]], the perfect substrate for a few different types of fungus. You could instead look on the standing [[trees|oak-trunks|(add: lost | 1)]] themselves, or among the leaf-[[litter|oat-litter|(add:lost | 1)]] between their roots.
 
 (again:
-  If you're bored of searching here, you could always head towards the [[pine|(check-lost: pine)|(set:lost + 1)]] grove that's visible ahead, or head [[uphill|(check-lost: birch)|(set: lost + 1)]] towards the birches and aspens.
+  If you're bored of searching here, you could always head towards the [[pine|(check-lost: pine)|(add:lost | 1)]] grove that's visible ahead, or head [[uphill|(check-lost: birch)|(add: lost | 1)]] towards the birches and aspens.
 
   (head-back:)
 )
@@ -152,7 +152,7 @@ You search the fallen logs, ignoring scaly lichens and fuzzy mosses in your hunt
 
 # lost
 
-(set: worry = 1)
+(set: worry | 1)
 
 (if:
 | (context-count:) > 0:
@@ -177,7 +177,7 @@ trail)]](if:
 `` Function for checking whether you get lost when following a link.
 `` Takes one argument: the intended destination node.
 
-(set: _dest = (context:1) )
+(set: _dest | (context:1) )
 
 (if:
 | lost = 0: (val: _dest)

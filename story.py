@@ -43,12 +43,16 @@ def format_node(node, highlight="bracket"):
   content = node.content
   if highlight == "bracket":
     for opt in node.successors:
-      content = re.sub(r"\b{}\b".format(opt), "[{}]".format(opt), content)
+      content = re.sub(
+        r"\b{}\b".format(re.escape(opt)),
+        lambda _: "[{}]".format(opt), # to treat replacement as a literal
+        content
+      )
   elif highlight == "link":
     for opt in node.successors:
       content = re.sub(
-        r"\b{}\b".format(opt),
-        r'<a href="#{}">{}</a>'.format(opt, opt),
+        r"\b{}\b".format(re.escape(opt)),
+        lambda _: r'<a href="#{}">{}</a>'.format(opt, opt),
         content
       )
   return content
@@ -80,12 +84,10 @@ class StoryNode:
     self.name = name
     self.content = content
     self.successors = successors or {}
-    for k in self.successors:
-      if isinstance(self.successors[k], str):
-        self.successors[k] = (self.successors[k], [])
 
   def __str__(self):
-    return "[ {} ] {{ {} }}".format(
+    return "'{}' [ {} ] {{ {} }}".format(
+      self.name,
       self.content,
       ", ".join(key for key in self.successors)
     )
@@ -136,8 +138,8 @@ class StoryNode:
         "The sea calls to you, but you should go home."
       ),
       {
-        "The sea": ( "wading_out", [ SetValue("mood", "desolate") ] ),
-        "go home": ( "back_home", [] )
+        "The sea": [ "wading_out", "(set: mood | desolate)" ],
+        "go home": "back_home"
       }
     )
     ```
@@ -145,7 +147,7 @@ class StoryNode:
       "name": "at_the_beach",
       "content": "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
       "successors": {
-        "The sea": [ "wading_out", [ "set mood \\"desolate\\"" ] ],
+        "The sea": [ "wading_out", "(set: mood | desolate)" ],
         "go home": "back_home"
       }
     }
@@ -156,38 +158,17 @@ class StoryNode:
       "content": self.content,
     }
     if self.successors:
-      result["successors"] = {
-        k: pack(v[0])
-          if len(v[1]) == 0
-          else pack(v)
-          for (k, v) in self.successors.items()
-      }
+      result["successors"] = self.successors
     return result
 
   def _unpack_(obj):
     """
     Creates a StoryNode from a simple object (see packable.py).
     """
-    successors = None
-    if "successors" in obj:
-      successors = {}
-      for key in obj["successors"]:
-        if isinstance(obj["successors"][key], str):
-          successors[key] = (
-            obj["successors"][key],
-            []
-          )
-        else:
-          nxt, transition = obj["successors"][key]
-          successors[key] = (
-            nxt,
-            transition
-          )
-
     return StoryNode(
       obj["name"],
       obj["content"],
-      successors
+      obj["successors"] if "successors" in obj else {}
     )
 
   def is_ending(self):
@@ -262,8 +243,8 @@ class Story:
             "The sea calls to you, but you should go home."
             ),
             {
-              "The sea": ( "wading_out", [ SetValue("mood", "desolate") ] ),
-              "go home": ( "back_home", [ SetValue("mood", "warm") ] )
+              "The sea": [ "wading_out", "(set: mood | desolate)" ],
+              "go home": [ "back_home", "(set: mood | warm)" ]
             }
           ),
         "wading_out":
@@ -288,8 +269,8 @@ class Story:
           "name": "at_the_beach",
           "content": "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
           "successors": {
-            "The sea": [ "wading_out", [ "set mood \\"desolate\\"" ] ],
-            "go home": [ "back_home", [ "set mood \\"warm\\"" ] ]
+            "The sea": [ "wading_out", "(set: mood | desolate)" ],
+            "go home": [ "back_home", "(set: mood | warm)" ]
           }
         },
         "wading_out": {

@@ -10,9 +10,9 @@ import json
 
 from story import StoryNode, Story
 
-META_KEY = re.compile(r"^% \([A-Za-z0-9_.-][A-Za-z0-9_.-]*\):")
+META_KEY = re.compile(r"^% ([A-Za-z0-9_.-][A-Za-z0-9_.-]*):")
 COMMENT = re.compile(r"``.*$")
-NODE_START = re.compile(r"^#\s*\([A-Za-z0-9_.-][A-Za-z0-9_.-]*\)\s*$")
+NODE_START = re.compile(r"^#\s*([A-Za-z0-9_.-][A-Za-z0-9_.-]*)\s*$")
 
 def remove_comments(src):
   """
@@ -72,20 +72,23 @@ def parse_metadata(src):
   }
   leftovers = ""
   lines = src.split('\n')
+  current_key = None
   for i, line in enumerate(lines):
     if line.strip() == '':
       continue
     elif line[0] == '%':
       match = META_KEY.search(line)
       if match:
-        current_key = match.group(0)
+        current_key = match.group(1)
         metadata[current_key] = line[match.end():].strip()
-      else:
+      elif current_key:
         metadata[current_key] += ' ' + line[1:].strip()
+      else:
+        continue # ignore this line
     else:
       break
 
-  metadata[state] = json.loads(metadata[state])
+  metadata["state"] = json.loads(metadata["state"])
   return metadata, '\n'.join(lines[i:])
 
 def parse_first_node(src):
@@ -95,6 +98,26 @@ def parse_first_node(src):
 
   Returns (None, src) if there isn't a node definition present, or the parsed
   node plus the remaining source if there is.
+
+  Example:
+
+  ```
+  StoryNode(
+    "at_the_beach",
+    "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
+    {
+      "The sea": ("wading_out", "(set: mood | desolate)"),
+      "go home": ("back_home", "(set: mood | warm)")
+    }
+  )
+  ```
+  # at_the_beach
+
+  You walk along the beach, watching seabirds dance with the waves. [[The
+  sea|wading_out|(set: mood | desolate)]] calls to you, but you should [[go
+  home|back_home|(set: mood | warm)]].
+  ```
+
   """
   src = src.strip()
   first = NODE_START.search(src)
@@ -112,7 +135,7 @@ def parse_first_node(src):
     node_end = len(src)
 
   # Grab the name and content:
-  node["name"] = first.group(0)
+  node["name"] = first.group(1)
   content = src[first.end():node_end]
   leftovers = src[node_end:]
 
@@ -196,7 +219,57 @@ def parse_first_node(src):
 
 def parse_story(src):
   """
-  Parses a Story object from the contents of an .fls file.
+  Parses a Story object from the contents of an .fls file. Example:
+
+  ```
+  Story(
+    "The Ocean Calls",
+    "Anonymous",
+    "at_the_beach",
+    {
+      "at_the_beach":
+        StoryNode(
+          "at_the_beach",
+          (
+          "You walk along the beach, watching seabirds dance with the waves. "
+          "The sea calls to you, but you should go home."
+          ),
+          {
+            "The sea": ( "wading_out", "(set: mood | desolate)" ),
+            "go home": ( "back_home", "(set: mood | warm)" )
+          }
+        ),
+      "wading_out":
+        StoryNode(
+          "wading_out",
+          "You wade out into the icy water, shivering with anticipation."
+        ),
+      "back_home":
+        StoryNode(
+          "back_home",
+          "You step into the warmth of your living room and lock the door."
+        )
+    }
+  )
+  ```
+  % title: The Ocean Calls
+  % author: Anonymous
+  % start: at_the_beach
+
+  # at_the_beach
+
+  You walk along the beach, watching seabirds dance with the waves. [[The
+  sea|wading_out|(set: mood | desolate)]] calls to you, but you should [[go
+  home|back_home|(set: mood | warm)]].
+
+  # wading_out
+
+  You wade out into the icy water, shivering with anticipation.
+
+  # back_home
+
+  You step into the warmth of your living room and lock the door.
+  ```
   """
   # Get rid of comments and normalize newlines:
   src = remove_comments(normalize_newlines(src))
@@ -219,3 +292,63 @@ def parse_story(src):
     { node.name: node for node in nodes}, 
     meta["state"]
   )
+
+
+def render_node(node):
+  """
+  Renders an individual story node into a format that could be parsed with
+  parse_first_node.
+  """
+  # TODO: Flow into 80 characters here?
+  content = node.content
+  for display in node.successors:
+    if isinstance(node.successors[display], str):
+      destination = node.successors[display]
+      if destination == display:
+        content = re.sub(
+          r"\b{}\b".format(re.escape(display)),
+          lambda _: "[[{}]]".format(display), # lambda -> use result literally
+          content
+        )
+      else:
+        content = re.sub(
+          r"\b{}\b".format(re.escape(display)),
+          lambda _: "[[{}|{}]]".format(display, destination),
+          content
+        )
+    else:
+      destination, transition = node.successors[display]
+      if destination == display:
+        content = re.sub(
+          r"\b{}\b".format(re.escape(display)),
+          lambda _: "[[{}||{}]]".format(display, transition),
+          content
+        )
+      else:
+        content = re.sub(
+          r"\b{}\b".format(re.escape(display)),
+          lambda _: "[[{}|{}|{}]]".format(display, destination, transition),
+          content
+        )
+  return """\
+# {}
+
+{}
+""".format(node.name, content)
+
+def render_story(story):
+  """
+  The inverse of parse_story, render_story takes a Story object and returns a
+  string that could be used to reconstruct that Story using parse_story.
+  """
+  result = """\
+% title: {}
+% author: {}
+% start: {}
+"""
+  if story.setup:
+    setup_str = json.dumps(story.setup)
+    preamble += "% state: " + "\n% ".join(setup_str.split('\n')) + "\n"
+
+  for node_name in story.nodes:
+    result += '\n' + render_node(story.nodes[node_name])
