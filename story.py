@@ -178,10 +178,10 @@ class StoryNode:
             []
           )
         else:
-          nxt, changes = obj["successors"][key]
+          nxt, transition = obj["successors"][key]
           successors[key] = (
             nxt,
-            [ unpack(sc, StateChange) for sc in changes ]
+            transition
           )
 
     return StoryNode(
@@ -346,6 +346,7 @@ class Story:
     result["_status_"] = "beginning"
     return result
 
+  # TODO: Prefix-based option selection as promised in help.flj
   def advance(self, node_name, state, decision, highlight="bracket"):
     """
     Takes a decision (naming an option at the given node) and figures out how
@@ -404,7 +405,7 @@ class Story:
         state
       )
 
-    next_name, state_changes = node.successors[matching_key]
+    next_name, transition_text = node.successors[matching_key]
 
     if state["_status_"] == "beginning":
       state["_status_"] = "unfolding"
@@ -430,6 +431,7 @@ class Story:
       state["_status_"] = "finished"
 
     # implement state updates:
+    # TODO: Macros in transition text instead!
     for sc in state_changes:
       sc.apply(state)
 

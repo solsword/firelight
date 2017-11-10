@@ -96,13 +96,102 @@ def parse_first_node(src):
   Returns (None, src) if there isn't a node definition present, or the parsed
   node plus the remaining source if there is.
   """
+  src = src.strip()
   first = NODE_START.search(src)
-  before = src[:first.start()]
-  if not first or not re.match("[ \t\n\r]*", before, flags=re.MULTILINE):
+  # No node found:
+  if not first or first.start != 0:
     return (None, src)
+
+  node = {}
+
+  # Search for the next node, or else use the end of the source:
   second = NODE_START.search(src, pos=first.end())
-  content = src[first.end():second.start()]
-  # TODO: HERE
+  if second:
+    node_end = second.start()
+  else:
+    node_end = len(src)
+
+  # Grab the name and content:
+  node["name"] = first.group(0)
+  content = src[first.end():node_end]
+  leftovers = src[node_end:]
+
+  # Find and transform all links in the text, replacing them with their display
+  # text and creating link entries for each. Note that if the display text is
+  # not unique, all instances within the node will be highlighted.
+  link_extents = []
+  i = 0
+  while i < len(content) - 1:
+    i += 1 # we intentionally skip i = 0 since we match the second '['
+    if content[i-1:i+1] == "[[":
+      try:
+        close = utils.matching_brace(content, i, '[', ']')
+      except utils.UnmatchedError:
+        # TODO: Print a warning here?
+        continue
+
+      # Push to create reverse ordering so link replacement doesn't change
+      # indices of earlier link_extents.
+      link_extents.insert(0, (i+1, close))
+
+      # jump ahead to the end of this link
+      i = close
+
+  node["successors"] = {}
+  for start, end in link_extents:
+    # Ordering is last-to-first, so that replacement here doesn't affect
+    # indices of earlier links.
+    contents = content[start:end]
+    contents = contents.strip()
+    # TODO: Error if this strip results in an empty string?
+
+    # First, figure out display text:
+    if contents[0] == '"':
+      end, val = utils.string_literal(contents, 0, '"')
+      if '|' in contents[end:]:
+        display_end = contents.index('|',end)
+        display = val + contents[end:display_end]
+      else:
+        display_end = len(contents)
+        display = val + contents[end:]
+    else:
+      try:
+        display_end = contents.index('|')
+        display = contents[:display_end]
+      except ValueError:
+        display_end = len(contents)
+        display = contents
+
+    # Next figure out the link destination:
+    if display_end < len(contents):
+      try:
+        dest_end = contents.index('|', display_end+1)
+        destination = contents[display_end+1:dest_end].strip()
+        if destination == "":
+          destination = display
+      except ValueError:
+        dest_end = len(contents)
+        destination = contents[display_end+1:].strip()
+    else:
+      destination = display
+      dest_end = len(contents)
+
+    # Finally, grab the transition text:
+    transition = contents[dest_end+1:].strip()
+
+    # Revise the source to replace the link literal with its display text:
+    content = content[:start-2] + display + content[end+2:]
+
+    # Add to our links information:
+    if transition:
+      node["successors"][display] = [destination, transition]
+    else:
+      node["successors"][display] = destination
+
+  # Put the revised content into our node:
+  node["content"] = content
+
+  return (unpack(node, StoryNode), leftovers)
 
 
 def parse_story(src):

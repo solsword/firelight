@@ -72,9 +72,14 @@ Of course, you could just start searching among the oaks and maples right [[here
 
 (again:
   (if:
-  | (inv.count: "#m") = 0: It's a shame you didn't find anything, but hunting is always a matter of luck.
-  | (inv.count: "#m") < 4: You've collected a few specimens, but you wish you'd had time to look for more.
-  | else: You've got plenty of mushrooms to sort out when you get back.
+  | (inv.count: "#mushroom") = 0:
+    It's a shame you didn't find anything, but hunting is always a matter of
+    luck.
+  | (inv.count: "#mushroom") < 4:
+    You've collected a few specimens, but you wish you'd had time to look for
+    more.
+  | else:
+    You've got plenty of mushrooms to sort out when you get back.
   )
   In any case, the sun is starting to dip towards the opposite hill, and you've got ground to cover before you're out of these woods. It's time to go [[home]].
 )
@@ -85,15 +90,17 @@ Of course, you could just start searching among the oaks and maples right [[here
 Finally back in the warmth of your apartment, you strip off your coat and boots and empty your pockets.
 
 (if:
-| (inv.count: "#m") = 0: Sadly, there's nothing inside them but a few flecks of
-                         lint.
-| (inv.count: "#m") < 4: You've managed to collect a few specimens:
-| else: You've assembled quite a nice collection:
+| (inv.count: "#mushroom") = 0:
+  Sadly, there's nothing inside them but a few flecks of lint.
+| (inv.count: "#mushroom") < 4:
+  You've managed to collect a few specimens:
+| else:
+  You've assembled quite a nice collection:
 )
 
 (if:
-  (inv.count: "#m") > 0:
-    (list.show: (inv.list: "#m") | lines | fancy)
+  (inv.count: "#mushroom") > 0:
+    (list.show: (inv.list: "#mushroom") | lines | fancy)
 
     ``TODO: HERE
 )
