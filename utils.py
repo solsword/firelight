@@ -63,6 +63,8 @@ def matching_brace(src, idx, op='(', cl=')'):
   not checked). The opening and closing brace characters may be specified using
   the 'op' and 'cl' parameters, which default to '(' and ')'. Nested braces of
   the same type and strings quoted using double quotes are ignored.
+
+  Returns the index of the matching brace found.
   """
   layer = 0
   quoted = False
@@ -86,17 +88,17 @@ def matching_brace(src, idx, op='(', cl=')'):
         layer -= 1
     elif c == op:
       layer += 1
-    else:
-      raise UnmatchedError(
-        "Unmatched '{}' at position {} in string:\n'''\n{}\n'''".format(
-          op,
-          idx,
-          src if len(src) < 800 else (
-            "...\n" + src[:800] + "\n..."
-              if idx < 80 else src[max(0, idx-80):idx+720] + "\n..."
-          )
-        )
+  # must hit return in loop or else
+  raise UnmatchedError(
+    "Unmatched '{}' at position {} in string:\n'''\n{}\n'''".format(
+      op,
+      idx,
+      src if len(src) < 800 else (
+        "...\n" + src[:800] + "\n..."
+          if idx < 80 else src[max(0, idx-80):idx+720] + "\n..."
       )
+    )
+  )
 
 def string_literal(src, idx, qc='"'):
   """

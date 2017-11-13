@@ -114,16 +114,19 @@ class StoryNode:
     return True
 
   def _diff_(self, other):
+    results = []
     if self.name != other.name:
-      return [ "names ('{}' =/= '{}')".format(self.name, other.name) ]
+      results.append("names ('{}' =/= '{}')".format(self.name, other.name))
     if self.content != other.content:
-      return [ "content ('{}' =/= '{}')".format(self.content, other.content) ]
+      results.append(
+        "content ('{}' =/= '{}')".format(self.content, other.content)
+      )
     if self.successors != other.successors:
-      return [
+      results.extend([
         "successors: {}".format(d)
           for d in diff(self.successors, other.successors)
-      ]
-    return []
+      ])
+    return results
 
   def _pack_(self):
     """

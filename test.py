@@ -15,12 +15,38 @@ from diffable import diff
 from story import StoryNode, Story
 from state import StateChange, SetValue, IncrementValue, InvertValue
 
+from parse import reflow, remove_comments
 from parse import parse_story, render_story, parse_first_node, render_node
 
 all_tests = []
 def test(f):
   all_tests.append(f)
   return f
+
+@test
+def test_matching_brace():
+  idx = utils.matching_brace("(())", 0)
+  assert idx == 3, "Found wrong matching brace."
+
+  idx = utils.matching_brace("(())", 1)
+  assert idx == 2, "Found wrong matching brace."
+
+  idx = utils.matching_brace("()()", 0)
+  assert idx == 1, "Found wrong matching brace."
+
+  idx = utils.matching_brace("()()", 2)
+  assert idx == 3, "Found wrong matching brace."
+
+  idx = utils.matching_brace("(()())", 0)
+  assert idx == 5, "Found wrong matching brace."
+
+  try:
+    idx = utils.matching_brace("((())", 0)
+    assert False, "Found a false match ({}).".format(idx)
+  except utils.UnmatchedError:
+    pass
+
+  return True
 
 def mktest_packable(cls):
   @test
@@ -85,13 +111,25 @@ def test_parse_node():
   test_stuff = parse_first_node.__doc__.split("```")
 
   tinst = eval(utils.dedent(test_stuff[1]))
-  tstr = utils.dedent(test_stuff[2])
+  tstr = reflow(remove_comments(utils.dedent(test_stuff[2])))
 
-  uinst = parse_first_node(tstr)
+  uinst, leftovers = parse_first_node(tstr)
+  assert isinstance(uinst, StoryNode), (
+    "Failed to parse a node from:\n```\n{}\n``".format(tstr)
+  )
+  assert leftovers.strip() == "", (
+    "Parsed node had leftovers:\n```\n{}\n```".format(leftovers)
+  )
   rstr = render_node(tinst)
 
   urstr = render_node(uinst)
-  ruinst = parse_first_node(rstr)
+  ruinst, leftovers = parse_first_node(rstr)
+  assert isinstance(ruinst, StoryNode), (
+    "Failed to re-parse a node from:\n```\n{}\n``".format(rstr)
+  )
+  assert leftovers.strip() == "", (
+    "Re-parsed node had leftovers:\n```\n{}\n```".format(leftovers)
+  )
 
   assert tinst == uinst, (
     (
@@ -121,6 +159,8 @@ def test_parse_node():
       "\n  ".join(diff(tinst, ruinst))
     )
   )
+
+  return True
 
 @test
 def test_parse_story():
@@ -163,6 +203,8 @@ def test_parse_story():
       "\n  ".join(diff(tinst, ruinst))
     )
   )
+
+  return True
 
 def main():
   for t in all_tests:

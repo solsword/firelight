@@ -8,11 +8,18 @@ translates it into simple Python structures suitable for unpacking.
 import re
 import json
 
+import utils
+
+from packable import pack, unpack
+
 from story import StoryNode, Story
 
-META_KEY = re.compile(r"^% ([A-Za-z0-9_.-][A-Za-z0-9_.-]*):")
-COMMENT = re.compile(r"``.*$")
-NODE_START = re.compile(r"^#\s*([A-Za-z0-9_.-][A-Za-z0-9_.-]*)\s*$")
+META_KEY = re.compile(r"^% ([A-Za-z0-9_.-][A-Za-z0-9_.-]*):", re.MULTILINE)
+COMMENT = re.compile(r"``.*$", re.MULTILINE)
+NODE_START = re.compile(
+  r"^\s*#\s*([A-Za-z0-9_.-][A-Za-z0-9_.-]*)\s*$",
+  re.MULTILINE
+)
 
 def remove_comments(src):
   """
@@ -26,6 +33,21 @@ def normalize_newlines(src):
   converted to simple '\\n'.
   """
   return src.replace('\n\r', '\n').replace('\r\n', '\n').replace('\r', '\n')
+
+def reflow(src):
+  """
+  Parses manually broken lines and reflows them such that only places where
+  there were 2+ newlines are counted as newlines (a single newline each) and
+  places with a single newline are now just spaces.
+  """
+  # get rid of extra newlines at front and back:
+  src = re.sub("^\s*([^\n])", r"\1", src)
+  src = re.sub("([^\n])\s*$", r"\1", src)
+  # get rid of newlines between non-empty lines:
+  src = re.sub("([^\n])[ \t]*\n[ \t]*([^\n])", r"\1 \2", src)
+  # filter multiple newlines down to one:
+  src = re.sub("\n\s*", "\n", src)
+  return src
 
 def parse_metadata(src):
   """
@@ -106,8 +128,8 @@ def parse_first_node(src):
     "at_the_beach",
     "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
     {
-      "The sea": ("wading_out", "(set: mood | desolate)"),
-      "go home": ("back_home", "(set: mood | warm)")
+      "The sea": ["wading_out", "(set: mood | desolate)"],
+      "go home": ["back_home", "(set: mood | warm)"]
     }
   )
   ```
@@ -122,7 +144,7 @@ def parse_first_node(src):
   src = src.strip()
   first = NODE_START.search(src)
   # No node found:
-  if not first or first.start != 0:
+  if not first or first.start() != 0:
     return (None, src)
 
   node = {}
@@ -136,7 +158,7 @@ def parse_first_node(src):
 
   # Grab the name and content:
   node["name"] = first.group(1)
-  content = src[first.end():node_end]
+  content = reflow(src[first.end():node_end])
   leftovers = src[node_end:]
 
   # Find and transform all links in the text, replacing them with their display
@@ -235,8 +257,8 @@ def parse_story(src):
           "The sea calls to you, but you should go home."
           ),
           {
-            "The sea": ( "wading_out", "(set: mood | desolate)" ),
-            "go home": ( "back_home", "(set: mood | warm)" )
+            "The sea": [ "wading_out", "(set: mood | desolate)" ],
+            "go home": [ "back_home", "(set: mood | warm)" ]
           }
         ),
       "wading_out":
@@ -345,10 +367,13 @@ def render_story(story):
 % title: {}
 % author: {}
 % start: {}
-"""
+""".format(story.title, story.author, story.start)
+
   if story.setup:
     setup_str = json.dumps(story.setup)
     preamble += "% state: " + "\n% ".join(setup_str.split('\n')) + "\n"
 
   for node_name in story.nodes:
     result += '\n' + render_node(story.nodes[node_name])
+
+  return result
