@@ -48,6 +48,33 @@ def test_matching_brace():
 
   return True
 
+def mktest_eval_equals(fcn):
+  @test
+  def test_function():
+    test_stuff = fcn.__doc__.split("```")
+
+    gla = dict(globals())
+    gla[fcn.__name__] = fcn
+    tfirst = eval(utils.dedent(test_stuff[1]), gla)
+    tsecond = eval(utils.dedent(test_stuff[2]), gla)
+
+    assert tfirst == tsecond, (
+      (
+        "First object doesn't match second:\n```\n{}\n```\n{}\n```"
+        "\nDifferences:\n  {}"
+      ).format(str(tfirst), str(tsecond), "\n  ".join(diff(tfirst, tsecond)))
+    )
+
+    return True
+
+  test_function.__name__ = "test_" + fcn.__name__.lower() + "_example"
+
+for f in [
+  utils.string_literal,
+  utils.split_unquoted,
+]:
+  mktest_eval_equals(f)
+
 def mktest_packable(cls):
   @test
   def test_packable():

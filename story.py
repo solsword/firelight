@@ -186,6 +186,7 @@ class Story:
   some default initial state.
   """
   def __init__(self, title, author, start, nodes, setup=None):
+    # TODO: Add modules HERE
     self.title = title
     self.author = author
     self.start = start
@@ -328,6 +329,7 @@ class Story:
     result["_title_"] = self.title
     result["_author_"] = self.author
     result["_status_"] = "beginning"
+    result["_errors_"] = []
     return result
 
   # TODO: Prefix-based option selection as promised in help.flj

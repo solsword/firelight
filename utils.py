@@ -4,6 +4,8 @@ utils.py
 Various utility functions.
 """
 
+import re
+
 def dedent(string, ts=4):
   """
   Removes common leading whitespace from the given string. Each tab counts as
@@ -65,6 +67,13 @@ def matching_brace(src, idx, op='(', cl=')'):
   the same type and strings quoted using double quotes are ignored.
 
   Returns the index of the matching brace found.
+
+  Example:
+    ```
+    matching_brace("(()())", 0)
+    ```
+    5
+    ```
   """
   layer = 0
   quoted = False
@@ -118,6 +127,13 @@ def string_literal(src, idx, qc='"'):
   Invalid escape codes, such as '\\z', will result in a literal backslash along
   with the given letter in the output. Returns a pair containing the end index
   of the found string and the string content.
+
+  Example:
+    ```
+    string_literal(r'"two,\\"three\\""', 0)
+    ```
+    (14, "two,\\"three\\"")
+    ```
   """
   escaped = False
   result = ""
@@ -155,3 +171,85 @@ def string_literal(src, idx, qc='"'):
       )
     )
   )
+
+def split_unquoted(src, delim=',', qc='"'):
+  """
+  Splits the entire src string into items delimited by the given delimiter
+  (which is interpreted as a regular expression in MULTILINE mode), ignoring
+  delimiters that occur within quoted strings surrounded by the given quote
+  character (see string_literal above). When the entire content of a delimited
+  area is quoted, the string literal's value is used instead of the raw
+  characters as the value of that item. Delimited areas are stripped of leading
+  and trailing whitespace.
+
+  Example:
+    ```
+    split_unquoted(r'one, "two,three", four "five"', delim=',', qc='"')
+    ```
+    ["one", "two,three", 'four "five"']
+    ```
+  """
+  escaped = False
+  result = []
+  d = re.compile(delim, re.MULTILINE)
+
+  # First, find all quoted regions:
+  quoted_regions = {}
+  i = -1
+  while i < len(src):
+    i += 1
+    c = src[i]
+    if c == qc:
+      ei, qcont = string_literal(src, i, qc=qc)
+      quoted_regions[(i, ei)] = qcont
+      i = ei + 1 # skip ahead
+
+  # Next, look for delimiters:
+  delimiters = []
+  i = -1
+  while i < len(src):
+    i += 1
+    match = d.search(src, pos=i)
+    if match:
+      mp = match.start()
+      is_quoted = False
+      for qr in quoted_regions:
+        if qr[0] < mp < qr[1]: # was quoted; skip to end of quote
+          i = qr[1]
+          is_quoted = True
+          break
+
+      if is_quoted:
+        continue
+
+      delimiters.append(match)
+      i = match.end() # skip to end of match
+
+    else:
+      # done
+      i = len(src)
+
+  i = 0
+  bits = []
+  while i < len(src) and delimiters:
+    ed = delimiters.pop(0)
+    bits.append(src[i:ed.start()])
+    i = ed.end()
+  bits.append(src[i:])
+
+  # Strip fields and replace with literal contents when entire stripped field
+  # is one string literal.
+  simplified = []
+  for b in bits:
+    sb = b.strip()
+    if sb[0] == qc:
+      try:
+        ei, sl = string_literal(sb, 0, qc=qc)
+        if ei == len(sb) - 1:
+          sb = sl
+      except UnmatchedError:
+        pass
+
+    simplified.append(sb)
+
+  return simplified
