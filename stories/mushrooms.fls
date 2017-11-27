@@ -19,7 +19,7 @@
 %    "diamond-polypore": "too-old",
 %    "": ""
 %  },
-%  "inventory-descriptions": {
+%  "inv-desc": {
 %    "spade": "Your trusty spade."
 %    "bears-head-tooth": "A shaggy mass of branching white tendrils with brownish tips."
 %    "smoky-polypore": "Several leathery strips of fungus ripped from their base, white on top and dark gray on the bottom.",
@@ -27,13 +27,13 @@
 %    "diamond-polypore": "A few creamy-yellow trumpet-shaped mushrooms with delicate white honeycomb-lattice frills beneath.",
 %    "": ""
 %  },
-%  "inventory-categories": {
+%  "inv-cat": {
 %    "spade": "tool",
 %    "bears-head-tooth": "mushroom",
 %    "smoky-polypore": "mushroom",
 %  },
-%  "inventory": [
-%    { "id": "spade", "count": 1 }
+%  "inv": [
+%    { "id": "spade", "#": 1 }
 %  ]
 %}
 
@@ -122,10 +122,10 @@ Surrounded by majestic hardwoods at the peak of their fall colors, it takes effo
 You search the fallen logs, ignoring scaly lichens and fuzzy mosses in your hunt for mushrooms.
 (weighted-random:
 : 10 : Unfortunately, you just can't seem to find any. >>oak
-: 30 : You spot a colony of ragged white shelves with dark undersides growing in stacks on the bark of a fallen oak. There are plenty of them, but they seem difficult to dislodge. Do you try to collect them? [[yes|oak|(inv.get smoky-polypore)You peel off the flat layers in rough strips, leaving much of the fungus attached to the bark. The strips seem tough and leathery.]] / [[no|oak|You leave the rows of fungus alone, looking for something easier to gather.]]
-: 30 : You see a frilly flat colony growing on an old stump, with pretty stripes and white multi-lobed edges. Several layers overlap each other and the mushroom looks rather tough. Do you collect it? [[yes|oak|(inv.get turkey-tail)You rip layers of the colorful fungus from the bark, gripping its velvety surface.]] / [[no|oak|You leave the frills alone, estimating they'd be more useful for decorating than cooking.]]
-: 20 : You notice a few round creamy-yellow trumpet-shaped mushrooms sprouting from a dead trunk nearby. Inspecting them closely, you see a beautiful honeycomb of white gills underneath their fuzzy caps. Do you pick them? [[yes|oak|(inv.get diamond-polypore)You pry the mushrooms from the dead wood, feeling their spongy texture.]] / [[no|oak|You leave the mushrooms on the dead tree, reluctant to disturb their beauty.]]
-: 10 : You bend over to peek at the back side of a fallen maple trunk and see a shaggy-looking bunch white stems growing out of the dead wood. The mushroom doesn't have a cap or stem, but it is certainly some kind of fungal growth. Do you pick it? [[yes|oak|(inv.get bears-head-tooth)You pluck the feathery mass and stuff it into your pocket. Who knows, it might be delicious.]] / [[no|oak|Always good to be careful with these things.]]
+: 30 : You spot a colony of ragged white shelves with dark undersides growing in stacks on the bark of a fallen oak. There are plenty of them, but they seem difficult to dislodge. Do you try to collect them? [[yes|oak|(inv.plus smoky-polypore)You peel off the flat layers in rough strips, leaving much of the fungus attached to the bark. The strips seem tough and leathery.]] / [[no|oak|You leave the rows of fungus alone, looking for something easier to gather.]]
+: 30 : You see a frilly flat colony growing on an old stump, with pretty stripes and white multi-lobed edges. Several layers overlap each other and the mushroom looks rather tough. Do you collect it? [[yes|oak|(inv.plus turkey-tail)You rip layers of the colorful fungus from the bark, gripping its velvety surface.]] / [[no|oak|You leave the frills alone, estimating they'd be more useful for decorating than cooking.]]
+: 20 : You notice a few round creamy-yellow trumpet-shaped mushrooms sprouting from a dead trunk nearby. Inspecting them closely, you see a beautiful honeycomb of white gills underneath their fuzzy caps. Do you pick them? [[yes|oak|(inv.plus diamond-polypore)You pry the mushrooms from the dead wood, feeling their spongy texture.]] / [[no|oak|You leave the mushrooms on the dead tree, reluctant to disturb their beauty.]]
+: 10 : You bend over to peek at the back side of a fallen maple trunk and see a shaggy-looking bunch white stems growing out of the dead wood. The mushroom doesn't have a cap or stem, but it is certainly some kind of fungal growth. Do you pick it? [[yes|oak|(inv.plus bears-head-tooth)You pluck the feathery mass and stuff it into your pocket. Who knows, it might be delicious.]] / [[no|oak|Always good to be careful with these things.]]
 )
 
 >>oak

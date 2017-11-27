@@ -1,0 +1,214 @@
+% title: help
+% author: Peter Mawhorter
+% start: about
+% note: This 'module' just contains help on the macros system.
+
+# about
+
+This module contains help for Firelight's macro engine. Macros look like this:
+
+(if\:
+  : x < 3: less
+  : x = 3: three
+  : x > 3: more
+)
+
+The macro begins with parentheses-name-colon, has several arguments separated
+by ':' characters, and then ends with a closing parenthesis. An extra separator
+is allowed before the first argument; to give an empty first argument, use ::
+at first.
+
+Each macro has a result value, which by default is treated as text, but it may
+also be an integer, number, list, object, True, False, or None (JSON
+primitives). When a macro is used directly in story text, its result will be
+converted into text and inserted into the story. In other contexts, such as
+when used as the argument to another macro or as part of an
+[[expression|expressions]], its result will be used as-is.
+
+Note that the name of a story node can be used as a macro, with any arguments
+becoming available through the (context:) macro, just as when a link includes
+an '&' clause. The text of the node will be inserted in place of the call, and
+any macros it contains will expanded immediately, using current variable
+values, including _node and _prev (see [[automatic]] variables). Note that such
+included nodes cannot affect the node-specific variables of the including node,
+although they can read these variables. The links of included nodes are
+ignored.
+
+Note finally that link traversal text is separate from story node text, and
+will only be expanded when the relevant link is traversed, so it's the proper
+place to do things like set variables to record choices.
+
+
+Additional help topics:
+
+[[builtins]], [[automatic]] variables, [[expressions]]
+
+
+# builtins
+
+Built-in Macros
+
+===============
+
+The following built-in macros can be used. Note that if a story node shares the
+name of a built-in macro, the story node will be used instead.
+
+  (eval\: expression)
+    Takes a single expression as context and results in the result of
+    evaluating that expression.
+
+  (cat\: expr : expr : ...)
+    Takes multiple expressions, evaluates each, and concatenates them all into
+    one big result text. Useful with the '!' [[operator|expressions]].
+
+  (lookup\: object : key)
+    Evaluates the object and key [[expressions]] and looks up the given key in
+    the given object.
+
+  (context\: N)
+    Inserts the value of the given context variable, counting from 1. Use '&'
+    clauses on links to set context, or use extra arguments when calling a node
+    as a macro.
+
+  (if\: condition : result : condition : result : ... : else : result)
+    Basic conditional text/evaluation. Expands to the first 'result' text for
+    which the associated condition evaluates to True, or to the text of the
+    first 'else' case (non-first else cases are ignored; the use of 'else' as a
+    variable name is discouraged, as it can't be used alone in a conditional).
+    Macros in conditions are expanded only as tested, but it's bad practice to
+    put side-effect-inducing macros in conditions in any case. All macros in a
+    condition will be expanded before testing, so early-termination of and/or
+    statements
+
+  (once\: text)
+    The given text will only appear (and macros inside will only be expanded)
+    on the player's first visit to the containing node. Note that a (once:)
+    nested inside an (if:) won't trigger on subsequent node visits even if the
+    (if:) kept it from appearing the first time. (once:) is exactly equivalent
+    to (if: _first: text).
+
+  (again\: text)
+    The given text will only appear on return visits to a story node. This is
+    exactly equivalent to (if: not _first: text).
+
+  TODO: More of these?
+
+
+# automatic
+
+Automatic Variables
+
+===================
+
+These node-local variables are available by default when evaluating macros in
+addition to the normal story state:
+
+  _context: A list of context values set using either '&' clauses in a link to
+            this node, or arguments when this node is called as a macro.
+  _prev: The node name of the previous story node.
+  _node: The name of the current node.
+  _once: Set to True the first time a node is encountered by a player, and
+         False on subsequent visits. See also the (once:) and (again:) macros.
+
+  TODO: More of these?
+
+
+# expressions
+
+Macro Expressions 
+
+=================
+
+In some contexts, such as the odd-numbered arguments of an 'if' macro, text is
+evaluated as an expression, and macros used will have their results treated as
+the appropriate type. Within expressions, story variables may also be used. The
+'[[eval|builtins]]' built-in macro can be used to evaluate an expression.
+
+Node-local variables start with '_', while system variables both start and end
+with '_'. Note that some macros, like (set:), have side effects, so
+order-of-expansion can matter. Macros are expanded beginning-to-end of node,
+one expansion at a time, so that a series of nested expansions will all happen
+before any later expansion.
+
+Legal operators in expressions are:
+
+  +, -, *, /, //, %, and **
+    Standard mathematical operators, with the same meaning as in Python.
+
+  =,  !=, <, >, <=, and >=
+    Standard comparisons; same meaning as in Python
+
+  and, or, and not
+    Standard boolean operators; same meaning as in Python.
+
+  &, |, ^, ~
+    Bitwise operators; same meaning as in Python.
+    
+  ., *
+    '.' concatenates strings, while '*' multiplies strings as in Python.
+
+  /, //, ~, ~~
+    '/' tests whether the left-hand side contains a (regular expression) match
+    of the right-hand side, '//' tests whether the LHS contains a (simple)
+    match of the RHS, and '~' performs regular expression replacement within
+    the LHS, splitting the RHS on an unescaped '/' into pattern and replacement
+    parts. '~~' functions like '~' but treats its arguments as simple strings
+    instead of regular expressions. '/', '//', '~', and '~~' bind leftward, so
+    several searches/replacements can be listed after an original string and
+    they'll apply to it one after the other instead of applying to each other.
+
+  ^, ^^
+    When applied with a string as the LHS, performs a split operation using the
+    RHS to create a list. Examples:
+      ```>
+      "abc def" ^ " " = ["abc", "def"]
+      ```>
+      "a.b" ^ "." = ["", "", "", ""]
+      ```>
+      "a.b" ^^ "." = ["a", "b"]
+      ```
+
+  +, *
+    Standard list operators; same meaning as in Python.
+
+  .
+    Concatenates two lists, where '+' would append the second as an element of
+    the first.
+
+  |
+    When applied with a list as the LHS, '|' performs a join/reduce operation,
+    using the RHS string as a join string and converting each element to a
+    string, or using the RHS operator for reduction with its RHS as the anchor.
+    Examples:
+      ```>
+      ([True, False, True] | or False) = True
+      ```>
+      ([True, False, True] | and True) = False
+      ```>
+      ([1, 2, 3, 4] | + 0) = 10
+      ```>
+      ([1, 2, 3, 4] | * 1) = 24
+      ```>
+      ([1, 2, 3, 4] | * 1) = 24
+      ```
+
+  !
+    Performs an map operation, evaluating the RHS macro for each element of the
+    list with the '?' variable replaced by the list element. The result is a
+    list of values of whatever type the RHS macro returns. If the LHS is an
+    object instead of a list, '@' variable will resolve to the object being
+    mapped, while '?' will resolve to a single key, and the result will be a
+    new object storing the resulting values under the original keys.
+    
+    Examples:
+      ```>
+      [ 1, 2, 3 ] ! (add: 1 : ?) == [ 2, 3, 4 ]
+      ```>
+      [ 1, 2, 3 ] ! (times: 2 : ?) == [ 2, 4, 6 ]
+      ```>
+      [ "Ariel", "Ibrahim", "Sapna" ] ! (cat: "Hello ") ==
+      [ "Hello Ariel", "Hello Ibrahim", "Hello Sapna" ]
+      ```>
+      { "a": 1, "b": 2, "c": 3 } ! (eval: (lookup: @ : ?) + 2) ==
+      { "a": 3, "b": 4, "c": 5 }
+      ```

@@ -134,7 +134,7 @@ for cls in [ StoryNode, Story ]:
   mktest_packable(cls)
 
 @test
-def test_parse_node():
+def test_parse_first_node():
   test_stuff = parse_first_node.__doc__.split("```")
 
   tinst = eval(utils.dedent(test_stuff[1]))

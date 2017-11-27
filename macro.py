@@ -1,161 +1,11 @@
 """
 macro.py
 
-# Introduction
-
-Macro engine for Firelight. Macros look like this:
-
-(if:
-  : x < 3: less
-  : x = 3: three
-  : x > 3: more
-)
-
-The macro begins with parentheses-name-colon, has several arguments separated
-by ':' characters, and then ends with a closing parenthesis. An extra separator
-is allowed before the first argument; to give an empty first argument, use ::
-at first (or something like an empty string where applicable).
-
-Macros are expanded when rendering story nodes using story state variables.
-Node-local variables start with '_', while system variables both start and end
-with '_'. Note that some macros, like (set:), have side effects, so
-order-of-expansion can matter. Macros are expanded beginning-to-end of node,
-one expansion at a time, so that a series of nested expansions will all happen
-before any later expansion.
-
-Note that the name of a story node can be used as a macro, with any arguments
-becoming available through the (context:) macro, just as when a link includes
-an '&' clause. The text of the node will be inserted in place of the call, and
-any macros it contains will expanded immediately, using current variable
-values, including _node and _prev (see Automatic Variables below). Note that
-such included nodes cannot affect the node-specific variables of the including
-node, although they can read these variables. The links of included nodes are
-ignored.
-
-Note finally that link traversal text is separate from story node text, and
-will only be expanded when the relevant link is traversed, so it's the proper
-place to do things like set variables to record choices.
-
-# Expressions in Macros:
-
-Some macros, such as (if:) and (set:), evaluate certain parts of arguments as
-expressions. Legal operators in expressions are:
-
-  +, -, *, /, //, %, and **
-    Standard mathematical operators, with the same meaning as in Python.
-
-  =,  !=, <, >, <=, and >=
-    Standard comparisons; same meaning as in Python
-
-  and, or, and not
-    Standard boolean operators; same meaning as in Python.
-
-  &, |, ^, ~
-    Bitwise operators; same meaning as in Python.
-    
-  ., *
-    '.' concatenates strings, while '*' multiplies strings as in Python.
-
-  /, //, ~, ~~
-    , '/' tests whether the left-hand side contains a (regular expression)
-    match of the right-hand side, '//' tests whether the LHS contains a
-    (simple) match of the RHS, and '~' performs regular expression replacement
-    within the LHS, splitting the RHS on an unescaped '/' into pattern and
-    replacement parts. '~~' functions like '~' but treats its arguments as
-    simple strings instead of regular expressions. '/', '//', '~', and '~~'
-    bind leftward, so several searches/replacements can be listed after an
-    original string and they'll apply to it one after the other instead of
-    applying to each other.
-
-  ^, ^^
-    When applied with a string as the LHS, performs a split operation using the
-    RHS to create a list. Examples:
-      ```>
-      "abc def" ^ " " == ["abc", "def"]
-      ```>
-      "a.b" ^ "." == ["", "", "", ""]
-      ```>
-      "a.b" ^^ "." == ["a", "b"]
-      ```
-
-  +, *
-    Standard list operators; same meaning as in Python.
-
-  .
-    Concatenates two lists, where '+' would append the second as an element of
-    the first.
-
-  |
-    When applied with an array as the LHS, '|' performs a join/reduce
-    operation, using the RHS string as a join string and converting each
-    element to a string, or using the RHS operator for reduction with its RHS
-    as the anchor. Examples:
-      ```>
-      [True, False, True] | or False == True
-      ```>
-      [True, False, True] | and True == False
-      ```>
-      [1, 2, 3, 4] | + 0 == 10
-      ```>
-      [1, 2, 3, 4] | * 1 == 24
-      ```>
-      [1, 2, 3, 4] | * 1 == 24
-      ```
-
-  !
-    Performs an map operation, applying the RHS function to each element of the
-    LHS list. TODO: Functions?!?
-
-
-# Built-in Macros:
-
-The following built-in macros can be used. Note that if a story node shares the
-name of a built-in macro, the story node will be used instead.
-
-  (if: condition: result | condition: result | ... | else: result)
-    Basic conditional text/evaluation. Expands to the first 'result' text for
-    which the associated condition evaluates to True, or to the text of the
-    first 'else' case (non-first else cases are ignored; the use of 'else' as a
-    variable name is discouraged, as it can't be used alone in a conditional).
-    Macros in conditions are expanded only as tested, but it's bad practice to
-    put side-effect-inducing macros in conditions in any case. All macros in a
-    condition will be expanded before testing, so early-termination of and/or
-    statements
-
-  (once: text)
-    The given text will only appear (and macros inside will only be expanded)
-    on the player's first visit to the containing node. Note that a (once:)
-    nested inside an (if:) won't trigger on subsequent node visits even if the
-    (if:) kept it from appearing the first time. (once:) is exactly equivalent
-    to (if: _first: text).
-
-  (again: text)
-    The given text will only appear on return visits to a story node. This is
-    exactly equivalent to (if: not _first: text).
-
-  (context: N)
-    Inserts the value of the given context variable, counting from 1. Use '&'
-    clauses on links to set context, or use extra arguments when calling a node
-    as a macro.
-
-  TODO: More of these?
-
-# Automatic Variables:
-
-These node-local variables are available by default when evaluating macros in
-addition to the normal story state:
-
-  _context: A list of context values set using either '&' clauses in a link to
-            this node, or arguments when this node is called as a macro.
-  _prev: The node name of the previous story node.
-  _node: The name of the current node.
-  _once: Set to True the first time a node is encountered by a player, and
-         False on subsequent visits. See also the (once:) and (again:) macros.
-
-  TODO: More of these?
+See modules/help.fls for a description of the macro system.
 """
 
 import re
+import copy
 
 import utils
 
@@ -215,7 +65,8 @@ def expand_first(src, story, state):
             "Module '{}' doesn't define macro '{}'.".format(
               module_name,
               inner_name
-            )
+            ),
+            state
           )
 
       else:
@@ -224,7 +75,8 @@ def expand_first(src, story, state):
             module_name,
             macro_name,
             story.title
-          )
+          ),
+          state
         )
 
     elif macro_name in BUILTINS:
@@ -233,7 +85,7 @@ def expand_first(src, story, state):
     else:
       # Unrecognized macro: expands to error text
       # TODO: Better error text
-      exp, state = error("Unrecognized macro '{}'.".format(macro_name))
+      exp, state = error("Unrecognized macro '{}'.".format(macro_name), state)
 
   return src[:start] + exp + src[end:], state
 
@@ -261,6 +113,133 @@ def call_node(node, story, state, args):
   state.update(local_vars)
 
   return exp, state
+
+def eval_macro(name, args, story, state):
+  """
+  Evaluates the macro with the given name in the context of the given story,
+  feeding in the given arguments and using the given state. A return-value,
+  updated-state pair is returned.
+  """
+  state = copy.deepcopy(state)
+
+  if name in story.nodes:
+    node = story.nodes[name]
+
+    value, state = eval_text(node.content, story, state, args)
+
+  else:
+    # Must be built-in or from a module:
+    if name.count('.') == 1:
+      # From a module
+      module_name, inner_name = name.split('.')
+
+      if module_name in story.modules:
+        module = story.modules[module_name]
+
+        if inner_name in module.nodes:
+          node = module.nodes[inner_name]
+          # TODO: Some way to return a non-string here?
+          value, state = eval_text(node.content, story, state, args)
+
+        else:
+          value, state = error(
+            "Module '{}' doesn't define macro '{}'.".format(
+              module_name,
+              inner_name
+            ),
+            state
+          )
+
+      else:
+        value, state = error(
+          "Module '{}' for macro '{}' was not loaded by story '{}'.".format(
+            module_name,
+            name,
+            story.title
+          ),
+          state
+        )
+
+    elif name in BUILTINS:
+      # A built-in macro
+      value = BUILTINS[name](*args)
+    else:
+      # Unrecognized macro: expands to error text
+      # TODO: Better error text
+      value, state = error("Unrecognized macro '{}'.".format(name), state)
+
+  return value, state
+
+def eval_text(text, story, state, context=None):
+  """
+  Evaluates a string which may contain macros. Treats everything that's not
+  explicitly a macro as text. Returns a pair of computed-value, modified-state,
+  although the values of local variables (those that start with '_') will not
+  be affected.
+
+  Context may be specified as a list of values.
+  """
+  context = context or []
+
+  state = copy.deepcopy(state)
+
+  # Preserve local variables:
+  local_vars = {
+    v: copy.deepcopy(state[v])
+      for v in state
+      if v.startswith('_') and not v.endswith('_')
+  }
+
+  # Set context:
+  state["_context"] = context
+
+  # Split up text into strings and macros:
+  i = 0
+  bits = []
+  while i < len(text):
+    ms = MACRO_START.search(src, i)
+    if not ms: # no matches means no expansion needed
+      bits.append(text[i:])
+      i = len(text) # we're done
+    else:
+      # There's a match:
+      start = ms.start()
+      try:
+        end = utils.matching_brace(src, start, '(', ')')
+      except utils.UnmatchedError as e:
+        ectx = text[max(0, i-10):i+50]
+        ectx = ectx \
+          .replace('\n', '\u2424') \
+          .replace('\r', '\u240d') \
+          .replace('\t', '\u2409')
+        eii = 10 - max(0, 10 - i)
+        print(
+          "Warning: Unclosed macro treated as text:\n{}\n{}'''".format(
+            start,
+            ectx,
+            ' '*eii + '^' + ' '*(60 - eii - 1)
+          ),
+          file=sys.stderr
+        )
+        i = ms+1 # skip past that match
+        continue
+
+      # start and end found -> first add text before macro:
+      bits.append(text[i:start])
+      i = end + 1
+
+      # eval macro:
+      macro_name = ms.group(1)
+      macro_content = src[ms.end():end]
+      macro_args = utils.split_unquoted(macro_content, delim=':', qc='"')
+
+      mv, state = eval_macro(macro_name, macro_args, story, state)
+      bits.append(to_string(mv))
+
+  # Restore locals:
+  state.update(local_vars)
+
+  return ''.join(bits), state
 
 def error(message, state):
   """

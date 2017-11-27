@@ -1,0 +1,52 @@
+% title: inv
+% author: Peter Mawhorter
+% start: help
+% note: This module defines inventory-management macros.
+
+# help
+This is a module for inventory management. Note that it doesn't handle
+persistent world objects, just the inventory itself.
+
+It uses the following variables:
+
+inv -- A list of objects with "id" and "#" properties detailing inventory
+  contents. Managed automatically using the '[[plus|help_plus]]' and
+  '[[minus|help_minus]]' macros.
+
+inv-desc -- A mapping from item ID strings to item descriptions, used for fancy
+  '[[list|help_list]]'ing, among other things.
+
+inv-cat -- A mapping from item ID strings to category strings, used in various
+  macros including '[[count|help_count]]'. Items not assigned to any category
+  will be assigned the '<unknown>' category by default.
+
+The following macros are defined:
+
+[[count|help_count]], [[list|help_list]], [[plus|help_plus]],
+[[minus|help_minus]]
+
+# help_count
+
+The 'count' macro renders a number corresponding to the count of matching
+items. It takes a single argument specifying which items to count. This can be
+an item ID, in which case the count for that item is the result, or the result
+is 0 when that ID is not defined.
+
+Alternatively, the argument may begin with the '#' character, in which case it
+defines a category, and the sum of counts for all items in that category is
+used.
+
+If no arguments are given, 'count' returns the total count of all items in
+the inventory.
+
+# count
+
+# help_list
+
+The 'list' macro returns a list of inventory items that match the given filter.
+
+# list
+
+# plus
+
+# minus
