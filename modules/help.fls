@@ -68,7 +68,7 @@ name of a built-in macro, the story node will be used instead.
   (context\: N)
     Inserts the value of the given context variable, counting from 1. Use '&'
     clauses on links to set context, or use extra arguments when calling a node
-    as a macro.
+    as a macro. Invalid values of N will result in None.
 
   (if\: condition : result : condition : result : ... : else : result)
     Basic conditional text/evaluation. Expands to the first 'result' text for
@@ -132,6 +132,12 @@ before any later expansion.
 
 Legal operators in expressions are:
 
+  (, )
+    Used for grouping as usual.
+
+  [, ]
+    Used for dictionary/list indexing as in Python.
+
   +, -, *, /, //, %, and **
     Standard mathematical operators, with the same meaning as in Python.
 
@@ -144,18 +150,28 @@ Legal operators in expressions are:
   &, |, ^, ~
     Bitwise operators; same meaning as in Python.
     
-  ., *
-    '.' concatenates strings, while '*' multiplies strings as in Python.
+  +, *
+    '+' concatenates strings, while '*' multiplies strings as in Python.
 
-  /, //, ~, ~~
+  /, //
     '/' tests whether the left-hand side contains a (regular expression) match
     of the right-hand side, '//' tests whether the LHS contains a (simple)
-    match of the RHS, and '~' performs regular expression replacement within
-    the LHS, splitting the RHS on an unescaped '/' into pattern and replacement
-    parts. '~~' functions like '~' but treats its arguments as simple strings
-    instead of regular expressions. '/', '//', '~', and '~~' bind leftward, so
-    several searches/replacements can be listed after an original string and
-    they'll apply to it one after the other instead of applying to each other.
+    match of the RHS.
+    
+  ~, ~~
+    '~' performs regular expression replacement within the LHS, using two RHS
+    string values as pattern and replacement parts. '~~' functions like '~' but
+    treats its arguments as simple strings instead of regular expressions. '/',
+    '//', '~', and '~~' bind leftward, so several searches/replacements can be
+    listed after an original string and they'll apply to it one after the other
+    instead of applying to each other.
+      ```>
+      "abc abc" ~ "abc" "123" = "123 123"
+      ```>
+      "abc azc" ~ "a(.)c" "_\1_" = "_b_ _z_"
+      ```>
+      "(()())" ~~ "()" "\1" = "(11)"
+      ```
 
   ^, ^^
     When applied with a string as the LHS, performs a split operation using the
@@ -172,14 +188,16 @@ Legal operators in expressions are:
     Standard list operators; same meaning as in Python.
 
   .
-    Concatenates two lists, where '+' would append the second as an element of
-    the first.
+    Appends to a list, where '+' would extend the LHS with the RHS.
 
   |
     When applied with a list as the LHS, '|' performs a join/reduce operation,
-    using the RHS string as a join string and converting each element to a
-    string, or using the RHS operator for reduction with its RHS as the anchor.
+    using the RHS operator for reduction with its RHS as the interstitial
+    value.
+
     Examples:
+      ```>
+      (["A", "B", "C"] | + ", ") = "A, B, C"
       ```>
       ([True, False, True] | or False) = True
       ```>
@@ -187,9 +205,11 @@ Legal operators in expressions are:
       ```>
       ([1, 2, 3, 4] | + 0) = 10
       ```>
-      ([1, 2, 3, 4] | * 1) = 24
+      ([1, 2, 3, 4] | + 1) = 11
       ```>
       ([1, 2, 3, 4] | * 1) = 24
+      ```>
+      ([1, 2, 3, 4] | * 2) = 24*2*2*2
       ```
 
   !
@@ -206,9 +226,9 @@ Legal operators in expressions are:
       ```>
       [ 1, 2, 3 ] ! (times: 2 : ?) == [ 2, 4, 6 ]
       ```>
-      [ "Ariel", "Ibrahim", "Sapna" ] ! (cat: "Hello ") ==
+      [ "Ariel", "Ibrahim", "Sapna" ] ! (cat: "Hello " : ?) ==
       [ "Hello Ariel", "Hello Ibrahim", "Hello Sapna" ]
       ```>
-      { "a": 1, "b": 2, "c": 3 } ! (eval: (lookup: @ : ?) + 2) ==
+      { "a": 1, "b": 2, "c": 3 } ! (eval: @[?] + 2) ==
       { "a": 3, "b": 4, "c": 5 }
       ```
