@@ -396,31 +396,45 @@ def rotate_operators(result, new_op):
   if len(result["args"]) == 0:
     return None
 
-  lhs = result["args"][-1]
-  lop = lhs["op"]
+  target = result["args"][-1]
+  top = target["op"]
   if (
-    not lhs.get("grouped", False)
-and lop not in ("value", "opval")
+    not target.get("grouped", False)
+and top not in ("value", "opval")
   ):
-    lpr = OPERATOR_PRECEDENCE[lop]
+    lpr = OPERATOR_PRECEDENCE[top]
     hpr = OPERATOR_PRECEDENCE[new_op]
     if hpr > lpr:
       # Need to swap structure due to operator binding:
       nr = {
-        "parent": result,
+        "parent": target,
         "state": "need_val",
         "grouped": False,
         "op": new_op,
         "arity": 2,
-        "args": [ lhs ]
+        "args": [ target["args"][-1] ]
       }
       # Note: Arity/state for special operators must be fixed separately!
       # Supplant previous RHS:
-      result["args"][-1] = nr
+      target["args"][-1] = nr
       # Return new subtree:
       return nr
 
   return None
+
+def pt_string(parse_tree, indent=0):
+  result = ''
+  for k in parse_tree:
+    if k not in ("parent", "args"):
+      result += "{}: {}\n".format(k, parse_tree[k])
+
+  if "args" in parse_tree:
+    ind = ' '*(indent+2)
+    result += "args:\n"
+    for a in parse_tree["args"]:
+      result += ('\n' + ind).join((ind + pt_string(a, indent+2)).split('\n'))
+
+  return result
 
 def parse_units(units, ungrouped=False):
   """
@@ -573,6 +587,17 @@ def parse_units(units, ungrouped=False):
 
   if result["state"] != "complete":
     raise ParseError("Ended parsing in state '{}'.".format(result["state"]))
+
+  result = escape_upwards(result)
+  if (
+    result["state"] != "need_op"
+ or result["parent"] != None
+ or result["op"] != None
+ or result["arity"] != None
+  ):
+    raise ParseError("Ended parsing with leftover expectations.")
+
+  result = result["args"][0]
 
   if not ungrouped and result["op"] not in ("value", "opval"):
     result["grouped"] = True
