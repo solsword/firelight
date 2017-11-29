@@ -18,6 +18,8 @@ from state import StateChange, SetValue, IncrementValue, InvertValue
 from parse import reflow, remove_comments
 from parse import parse_story, render_story, parse_first_node, render_node
 
+from macro import parse_expr
+
 all_tests = []
 def test(f):
   all_tests.append(f)
@@ -230,6 +232,27 @@ def test_parse_story():
       "\n  ".join(diff(tinst, ruinst))
     )
   )
+
+  return True
+
+@test
+def test_parse_expr():
+  test_stuff = parse_expr.__doc__.split("```")
+
+  for i in range(1, len(test_stuff), 2):
+    tfcn = eval(utils.dedent(test_stuff[i]))
+    traw = eval(utils.dedent(test_stuff[i+1]))
+
+    assert tfcn == traw, (
+      (
+        "parse_expr result didn't match:\n```\n{}\n```\n{}\n```"
+        "\nDifferences:\n  {}"
+      ).format(
+        tfcn,
+        traw,
+        "\n  ".join(diff(tfcn, traw))
+      )
+    )
 
   return True
 

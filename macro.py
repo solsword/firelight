@@ -9,11 +9,11 @@ import copy
 
 import utils
 
-MACRO_START = re.compile(r"([a-zA-Z_][a-zA-Z_0-9.]\+):")
+MACRO_START = re.compile(r"([a-zA-Z_][a-zA-Z_0-9.]+):")
 
-INT_CONSTANT = re.compile(r"([+-])?(0[xo])?([0-9A-Fa-f])\+")
+INT_CONSTANT = re.compile(r"([+-])?(0[xo])?([0-9A-Fa-f])+")
 
-FLOAT_CONSTANT = re.compile(r"([+-])?([0-9]\+)(.[0-9]*)?([eE][+-]?[0-9]\+)?")
+FLOAT_CONSTANT = re.compile(r"([+-])?([0-9]+)(\.[0-9]*)?([eE][+-]?[0-9]+)?")
 
 OPERATOR_PRECEDENCE = {
   '[': 1000,
@@ -65,7 +65,7 @@ def mb_cat(story, state, *args):
   """
   results = []
   for arg in args:
-    val, state = eval_text(arg, story, state))
+    val, state = eval_text(arg, story, state)
     results.append(val)
   return ''.join(str(r) for r in results)
 
@@ -167,18 +167,18 @@ def lex_expr(expr):
   i = -1
   sval = None
   units = []
-  while i < len(expr):
+  while i < len(expr)-1:
     i += 1
     c = expr[i]
 
     # Check for end-of-word with accumulated string value:
     if c in "()[]+-%&|./*~^=<>!\"'" and sval != None:
-      units.append("word", sval)
+      units.append(("word", sval))
       sval = None
 
     if c in ' \n\r\t': # (separate if statement)
       if sval:
-        units.append("word", sval)
+        units.append(("word", sval))
         sval = None
     elif c == '(':
       m = MACRO_START.search(expr, i)
@@ -196,54 +196,45 @@ def lex_expr(expr):
     elif c == ']':
       units.append("index", "close")
     elif c in "+-%&|.":
-      units.append("op", c)
+      units.append(("op", c))
     elif c in "/*~^":
       if expr[i+1] == c:
-        units.append("op", c+c)
+        units.append(("op", c+c))
         i += 1
       else:
-        units.append("op", c)
+        units.append(("op", c))
     elif c == '=':
       if expr[i+1] == c: # allow '==' with same meaning as '='
         i += 1
-      units.append("op", c)
+      units.append(("op", c))
     elif c in '<>!':
       if expr[i+1] == '=':
-        units.append("op", expr[i:i+2])
+        units.append(("op", expr[i:i+2]))
         i += 1
       else:
-        units.append("op", c)
+        units.append(("op", c))
     elif c == 'a' and expr[i:i+3] == 'and':
       if sval != None:
         sval += "and"
       else:
-        units.append("op", "and")
+        units.append(("op", "and"))
       i += 2
     elif c == 'o' and expr[i:i+2] == 'or':
       if sval != None:
         sval += "or"
       else:
-        units.append("op", "and")
+        units.append(("op", "or"))
       i += 1
     elif c == 'n' and expr[i:i+3] == 'not':
       if sval != None:
         sval += "not"
       else:
-        units.append("op", "not")
+        units.append(("op", "not"))
       i += 2
     elif c in "0123456789":
       if sval != None:
         sval += c
       else:
-        m = FLOAT_CONSTANT.match(expr, i)
-        if m:
-          try:
-            f = float(m.group(0))
-            i = m.end()
-            units.append("float", f)
-            continue
-          except ValueError:
-            pass
         m = INT_CONSTANT.match(expr, i)
         if m:
           try:
@@ -254,7 +245,16 @@ def lex_expr(expr):
             else:
               it = int(m.group(0), 10)
             i = m.end()
-            units.append("int", it)
+            units.append(("int", it))
+            continue
+          except ValueError:
+            pass
+        m = FLOAT_CONSTANT.match(expr, i)
+        if m:
+          try:
+            f = float(m.group(0))
+            i = m.end()
+            units.append(("float", f))
             continue
           except ValueError:
             pass
@@ -265,7 +265,7 @@ def lex_expr(expr):
           sval += c
     elif c in "\"'":
       ei, qc = utils.string_literal(expr, i, qc=c)
-      units.append("string", qc)
+      units.append(("string", qc))
       i = ei
     else: # Not a recognized operator: add to string
       # TODO: Add sval as a unit somewhere?
@@ -273,6 +273,13 @@ def lex_expr(expr):
         sval = c
       else:
         sval += c
+
+  if sval:
+    units.append(("word", sval))
+    sval = None
+
+  # After the dust settles:
+  return units
 
 class ParseError(Exception):
   pass
@@ -351,9 +358,12 @@ def scrub_parents(result):
   """
   if "parent" in result:
     del result["parent"]
-  for arg in result["args"]:
-    if isinstance(arg, dict):
-      scrub_parents(arg)
+  if "args" in result:
+    for arg in result["args"]:
+      if isinstance(arg, dict):
+        scrub_parents(arg)
+
+  return result
 
 def escape_upwards(result):
   """
@@ -374,6 +384,43 @@ def escape_upwards(result):
     return result["parent"]
   else:
     return result
+
+def rotate_operators(result, new_op):
+  """
+  Checks if the given new operation should result in a rotated tree due to
+  operator precedence, and if so, returns the appropriately-rotated tree.
+  If not, it returns None. Note that this function assumes that the operator is
+  a standard binary operator, adjustments to arity and/or state for other
+  operators must be made separately.
+  """
+  if len(result["args"]) == 0:
+    return None
+
+  lhs = result["args"][-1]
+  lop = lhs["op"]
+  if (
+    not lhs.get("grouped", False)
+and lop not in ("value", "opval")
+  ):
+    lpr = OPERATOR_PRECEDENCE[lop]
+    hpr = OPERATOR_PRECEDENCE[new_op]
+    if hpr > lpr:
+      # Need to swap structure due to operator binding:
+      nr = {
+        "parent": result,
+        "state": "need_val",
+        "grouped": False,
+        "op": new_op,
+        "arity": 2,
+        "args": [ lhs ]
+      }
+      # Note: Arity/state for special operators must be fixed separately!
+      # Supplant previous RHS:
+      result["args"][-1] = nr
+      # Return new subtree:
+      return nr
+
+  return None
 
 def parse_units(units, ungrouped=False):
   """
@@ -401,6 +448,7 @@ def parse_units(units, ungrouped=False):
   while rest:
     if result["state"] == "complete":
       result = escape_upwards(result)
+      # and keep parsing here
     elif result["state"] == "blank":
       try:
         val, rest = parse_next_val(rest)
@@ -408,7 +456,6 @@ def parse_units(units, ungrouped=False):
           {
             "parent": result,
             "state": "complete",
-            "grouped": True,
             "op": "value",
             "value": val
           }
@@ -429,7 +476,6 @@ def parse_units(units, ungrouped=False):
           {
             "parent": result,
             "state": "complete",
-            "grouped": True,
             "op": "value",
             "value": val
           }
@@ -457,6 +503,10 @@ def parse_units(units, ungrouped=False):
       if op == 'not': # unary operator
         raise ParseError("Expected binary operator but got '{}'.".format(op))
       elif otyp == "index": # recurse to get index parse tree
+        rr = rotate_operators(result, '[')
+        if rr:
+          result = rr
+        # else no change
         level = 0
         for i in range(1, len(rest)):
           if rest[i] == ("index", "open"):
@@ -467,45 +517,40 @@ def parse_units(units, ungrouped=False):
               break
         if level >= 0:
           raise ParseError("Unmatched '['.")
+        result["arity"] = 2
+        result["op"] = '['
+        result["state"] = "complete"
         result["args"].append(parse_units(rest[1:i]))
         rest = rest[i+1:]
-        result["state"] = "complete"
-      elif op in ('~', '~~'): # trinary substitution operators
-        result["arity"] = 3
-        result["op"] = op
-        result["state"] = "need_val"
-      elif op == "|": # possibly operator-trinary
-        result["arity"] = 3
-        result["op"] = op
-        result["state"] = "possibly_optri"
-      elif op == '!':
-        result["arity"] = 2
-        result["op"] = op
-        result["state"] = "need_call"
-      else: # a normal binary operator
-        # TODO: operator precedence here
-        result["arity"] = 2
-        result["op"] = op
-        result["state"] = "need_val"
-    elif result["state"] == "possibly_optri":
-      orest = rest
-      try:
-        (otyp, op), rest = parse_next_op(rest)
-        result["args"].append(
-          {
-            "parent": result,
-            "state": "complete",
-            "grouped": True,
-            "op": "opval",
-            "value": op
-          }
-        )
-        result["state"] = "need_val"
-      except ParseError as e: # just a normal binary operator
-        # TODO: operator precedence here
-        rest = orest
-        result["arity"] = 2 # revise arity
-        result["state"] = "need_val"
+      else: # a binary (or possibly trinary) operator
+        rr = rotate_operators(result, op)
+        if rr:
+          result = rr
+        else:
+          result["arity"] = 2
+          result["op"] = op
+          result["state"] = "need_val"
+
+        # Fix arity/state for special operators:
+        if op in ('~', '~~'):
+          result["arity"] = 3
+        elif op == '|':
+          result["arity"] = 3
+          result["state"] = "need_opval"
+        elif op == '!':
+          result["state"] = "need_call"
+
+    elif result["state"] == "need_opval":
+      (otyp, op), rest = parse_next_op(rest)
+      result["args"].append(
+        {
+          "parent": result,
+          "state": "complete",
+          "op": "opval",
+          "value": op
+        }
+      )
+      result["state"] = "need_val"
     elif result["state"] == "need_call":
       (vtyp, val), rest = parse_next_val(rest)
       if vtyp == "call":
@@ -513,7 +558,6 @@ def parse_units(units, ungrouped=False):
           {
             "parent": result,
             "state": "complete",
-            "grouped": True,
             "op": "value",
             "value": (vtyp, val)
           }
@@ -527,14 +571,10 @@ def parse_units(units, ungrouped=False):
 
   # No more leftovers
 
-  if result["state"] == "need_op" and len(result["args"] == 1):
-    # Ended at valid full-value (expecting operator)
-    result = result["args"][0]
-    result["parent"] = None
-  else:
+  if result["state"] != "complete":
     raise ParseError("Ended parsing in state '{}'.".format(result["state"]))
 
-  if !ungrouped:
+  if not ungrouped and result["op"] not in ("value", "opval"):
     result["grouped"] = True
 
   return result
@@ -543,20 +583,120 @@ def parse_expr(expr):
   """
   Parses a macro expression into a parse tree of operations.
 
+  Examples:
     ```
     parse_expr("1 + 2")
     ```
     {
-      "parent": None,
-      "state": "blank",
-      "grouped": False,
-      "op": None,
-      "arity": None,
-      "args": []
+      "state": "complete",
+      "grouped": True,
+      "op": '+',
+      "arity": 2,
+      "args": [
+        {
+          "state": "complete",
+          "op": "value",
+          "value": ("int", 1)
+        },
+        {
+          "state": "complete",
+          "op": "value",
+          "value": ("int", 2)
+        }
+      ]
+    }
+    ```
+    parse_expr("'one' or False")
+    ```
+    {
+      "state": "complete",
+      "grouped": True,
+      "op": 'or',
+      "arity": 2,
+      "args": [
+        {
+          "state": "complete",
+          "op": "value",
+          "value": ("string", 'one')
+        },
+        {
+          "state": "complete",
+          "op": "value",
+          "value": ("boolean", False)
+        }
+      ]
+    }
+    ```
+    parse_expr("1 * 2 + 3")
+    ```
+    {
+      "state": "complete",
+      "grouped": True,
+      "op": '+',
+      "arity": 2,
+      "args": [
+        {
+          "state": "complete",
+          "grouped": False,
+          "op": '*',
+          "arity": 2,
+          "args": [
+            {
+              "state": "complete",
+              "op": "value",
+              "value": ("int", 1)
+            },
+            {
+              "state": "complete",
+              "op": "value",
+              "value": ("int", 2)
+            }
+          ]
+        },
+        {
+          "state": "complete",
+          "op": "value",
+          "value": ("int", 3)
+        }
+      ]
+    }
+    ```
+    parse_expr("1 + 2 * 3")
+    ```
+    {
+      "state": "complete",
+      "grouped": True,
+      "op": '+',
+      "arity": 2,
+      "args": [
+        {
+          "state": "complete",
+          "op": "value",
+          "value": ("int", 1)
+        },
+        {
+          "state": "complete",
+          "grouped": False,
+          "op": '*',
+          "arity": 2,
+          "args": [
+            {
+              "state": "complete",
+              "op": "value",
+              "value": ("int", 2)
+            },
+            {
+              "state": "complete",
+              "op": "value",
+              "value": ("int", 3)
+            }
+          ]
+        }
+      ]
     }
     ```
   """
-  units = lex(expr)
+  units = lex_expr(expr)
   return scrub_parents(parse_units(units))
 
 def eval_tree(tree):
@@ -585,6 +725,7 @@ def eval_tree(tree):
     else:
       return ("string", str(v1) + str(v2))
   elif tree["op"] == '-':
+    pass
     # TODO: HERE
 
 
