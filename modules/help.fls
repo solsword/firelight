@@ -150,13 +150,17 @@ Legal operators in expressions are:
   &, |, ^, ~
     Bitwise operators; same meaning as in Python.
     
-  +, *
-    '+' concatenates strings, while '*' multiplies strings as in Python.
+  +, -, *
+    '+' concatenates strings, while '*' multiplies strings as in Python. '-'
+    calls replace on the LHS to replace all instances of the RHS with the empty
+    string. '+' will also concatenate anything with a string by first
+    transforming the RHS/LHS into a string and then adding the two strings.
 
   /, //
     '/' tests whether the left-hand side contains a (regular expression) match
     of the right-hand side, '//' tests whether the LHS contains a (simple)
-    match of the RHS.
+    match of the RHS. '/' can also be used to search lists, but only for exact
+    matches in that case.
     
   ~, ~~
     '~' performs regular expression replacement within the LHS, using two RHS
@@ -164,7 +168,8 @@ Legal operators in expressions are:
     treats its arguments as simple strings instead of regular expressions. '/',
     '//', '~', and '~~' bind leftward, so several searches/replacements can be
     listed after an original string and they'll apply to it one after the other
-    instead of applying to each other.
+    instead of applying to each other. '~' also works to replace values in
+    lists.
       ```>
       "abc abc" ~ "abc" "123" = "123 123"
       ```>
@@ -188,14 +193,33 @@ Legal operators in expressions are:
     Standard list operators; same meaning as in Python.
 
   .
-    Appends to a list, where '+' would extend the LHS with the RHS.
+    Appends to a list, where '+' would extend the LHS with the RHS. Note that
+    this operator makes a copy of the list to avoid modifying the original, so
+    it's slow if repeated. Can also be used with two operands to add to a
+    dictionary.
+
+  +, |, &, -
+    Dictionary set operators. '+' unions two dictionaries keeping overlapping
+    values from the RHS, while '|' keeps them from the LHS. '&' keeps only keys
+    in both dictionaries, using values from the RHS. '-' keeps only values in
+    the LHS but not the RHS.
 
   |
     When applied with a list as the LHS, '|' performs a join/reduce operation,
     using the RHS operator for reduction with its RHS as the interstitial
-    value.
+    value. When the list is empty, a default value according to the type of the
+    RHS is returned:
+
+      int -> 0
+      float -> 0.0
+      string -> ""
+      list -> []
+      dict -> {}
+      ??? -> None
 
     Examples:
+      ```>
+      ([] | + ", ") = ""
       ```>
       (["A", "B", "C"] | + ", ") = "A, B, C"
       ```>
@@ -214,11 +238,13 @@ Legal operators in expressions are:
 
   !
     Performs an map operation, evaluating the RHS macro for each element of the
-    list with the '?' variable replaced by the list element. The result is a
-    list of values of whatever type the RHS macro returns. If the LHS is an
-    object instead of a list, '@' variable will resolve to the object being
-    mapped, while '?' will resolve to a single key, and the result will be a
-    new object storing the resulting values under the original keys.
+    list with the '?' variable replaced by the list element, the '@' variable
+    replaced by the list, and the '#' variable replaced by the list index. The
+    result is a list of values of whatever type the RHS macro returns. If the
+    LHS is a dictionary instead of a list, the '@' variable will resolve to the
+    dictionary being mapped, the '#' variable to a key, and the '?' variable to
+    that key's value, and the result will be a new dictionary storing the
+    resulting values under the original keys. Note that key order is arbitrary.
     
     Examples:
       ```>
@@ -229,6 +255,9 @@ Legal operators in expressions are:
       [ "Ariel", "Ibrahim", "Sapna" ] ! (cat: "Hello " : ?) ==
       [ "Hello Ariel", "Hello Ibrahim", "Hello Sapna" ]
       ```>
-      { "a": 1, "b": 2, "c": 3 } ! (eval: @[?] + 2) ==
+      { "a": 1, "b": 2, "c": 3 } ! (eval: ? + 2) ==
+      { "a": 3, "b": 4, "c": 5 }
+      ```>
+      { "a": 1, "b": 2, "c": 3 } ! (eval: @[#] + 2) ==
       { "a": 3, "b": 4, "c": 5 }
       ```

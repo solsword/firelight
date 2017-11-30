@@ -9,40 +9,13 @@ import copy
 
 import utils
 
+import ops
+
 MACRO_START = re.compile(r"([a-zA-Z_][a-zA-Z_0-9.]+):")
 
 INT_CONSTANT = re.compile(r"([+-])?(0[xo])?([0-9A-Fa-f])+")
 
 FLOAT_CONSTANT = re.compile(r"([+-])?([0-9]+)(\.[0-9]*)?([eE][+-]?[0-9]+)?")
-
-OPERATOR_PRECEDENCE = {
-  '[': 1000,
-  '.': 50,
-  '%': 20,
-  '+': 50,
-  '-': 50,
-  '*': 100,
-  '**': 200,
-  '~': 200,
-  '~~': 200,
-  '|': 200,
-  '&': 200,
-  '^': 200,
-  '^^': 200,
-  '/': 200,
-  '//': 200,
-  '=': 10,
-  '==': 10,
-  '<': 10,
-  '>': 10,
-  '<=': 10,
-  '>=': 10,
-  '!=': 10,
-  '!': 100,
-  'and': 5,
-  'or': 5,
-  'not': 5,
-}
 
 def mb_eval(story, state, *args):
   """
@@ -104,8 +77,9 @@ def mb_if(story, state, *args):
   of the first even argument whose condition matched. Unmatched even arguments
   are not evaluated.
   """
-  odd = [args[i] for i in range(len(args), 2)]
+  odd = [args[i] for i in range(0, len(args), 2)]
   even = [args[i] for i in range(1, len(args), 2)]
+  print("Odd/even:", odd, even)
   # Leftover becomes an implicit else case:
   # TODO: Issue warning here?
   el = None
@@ -113,7 +87,16 @@ def mb_if(story, state, *args):
     el = odd.pop()
 
   for i, arg in enumerate(odd):
-    val, state = eval_expr(arg, story, state)
+    print("EE", arg)
+    try:
+      val, state = eval_expr(arg, story, state)
+    except Exception as e:
+      import traceback
+      import sys
+      #traceback.print_tb(sys.last_traceback)
+      traceback.print_tb(sys.exc_info()[2])
+      print("ERR", e)
+    print("EE->", val)
     if val: # the string "else" will pass this test
       return eval_text(even[i], story, state)
 
@@ -402,8 +385,8 @@ def rotate_operators(result, new_op):
     not target.get("grouped", False)
 and top not in ("value", "opval")
   ):
-    lpr = OPERATOR_PRECEDENCE[top]
-    hpr = OPERATOR_PRECEDENCE[new_op]
+    lpr = ops.OPERATOR_PRECEDENCE[top]
+    hpr = ops.OPERATOR_PRECEDENCE[new_op]
     if hpr > lpr:
       # Need to swap structure due to operator binding:
       nr = {
@@ -484,6 +467,7 @@ def parse_units(units, ungrouped=False):
         else:
           raise e
     elif result["state"] == "need_val":
+      backup = rest
       try:
         val, rest = parse_next_val(rest)
         result["args"].append(
@@ -510,6 +494,15 @@ def parse_units(units, ungrouped=False):
           }
           result["args"].append(nr)
           result = nr # shift down into lower context
+        elif (
+          result["op"] == '.'
+      and result["arity"] == 3
+      and len(result["args"]) == 2
+        ):
+          # revise our arity estimate and reset rest:
+          result["arity"] = 2
+          result["complete"] = True
+          rest = backup
         else:
           raise e
     elif result["state"] == "need_op":
@@ -546,7 +539,7 @@ def parse_units(units, ungrouped=False):
           result["state"] = "need_val"
 
         # Fix arity/state for special operators:
-        if op in ('~', '~~'):
+        if op in ('~', '~~', '.'):
           result["arity"] = 3
         elif op == '|':
           result["arity"] = 3
@@ -585,7 +578,16 @@ def parse_units(units, ungrouped=False):
 
   # No more leftovers
 
-  if result["state"] != "complete":
+  if result["state"] == "complete":
+    pass
+  elif result["state"] == "need_op":
+    if (
+      result["parent"] != None
+   or result["op"] != None
+   or result["arity"] != None
+    ):
+      raise ParseError("Ended parsing with leftover expectations.")
+  else:
     raise ParseError("Ended parsing in state '{}'.".format(result["state"]))
 
   result = escape_upwards(result)
@@ -598,6 +600,7 @@ def parse_units(units, ungrouped=False):
     raise ParseError("Ended parsing with leftover expectations.")
 
   result = result["args"][0]
+  result["parent"] = None
 
   if not ungrouped and result["op"] not in ("value", "opval"):
     result["grouped"] = True
@@ -609,6 +612,14 @@ def parse_expr(expr):
   Parses a macro expression into a parse tree of operations.
 
   Examples:
+    ```?
+    parse_expr("True")
+    ```=
+    {
+      "state": "complete",
+      "op": "value",
+      "value": ("boolean", True)
+    }
     ```?
     parse_expr("1 + 2")
     ```=
@@ -724,34 +735,75 @@ def parse_expr(expr):
   units = lex_expr(expr)
   return scrub_parents(parse_units(units))
 
-def eval_tree(tree):
+def eval_tree(tree, state):
   """
   Evaluates a parse tree and returns an actual value. Use parse_expr to create
-  a parse tree. Returns a (type, value) pair.
+  a parse tree. Returns a ((type, value), update_state) complex.
   """
+  # Handle the base cases:
   if tree["op"] in ("value", "opval"):
-    return tree["value"]
-  elif tree["op"] == '+':
-    t1, v1 = tree["args"][0]
-    t2, v2 = tree["args"][1]
-    if t1 == "string":
-      return ("string", str(v1) + str(v2))
-    elif t1 == "boolean" and t2 == "boolean":
-      return ("boolean", t1 or t2)
-    elif t1 in ("int", "float") and t2 in ("int", "float"):
-      return ("int", v1 + v2)
-    elif t1 == "list" and t2 == "list":
-      return ("list", v1 + v2)
-    elif t1 == "dict" and t2 == "dict":
-      result = {}
-      result.update(v1)
-      result.update(v2)
-      return ("dict", result)
+    return tree["value"], state
+
+  # Short-circuiting and other special-case operators:
+  if tree["op"] == 'or':
+    (t, v), state = eval_tree(tree["args"][0], state)
+    if ops.is_true(t, v):
+      return ("boolean", True), state
     else:
-      return ("string", str(v1) + str(v2))
-  elif tree["op"] == '-':
-    pass
-    # TODO: HERE
+      (t, v), state = eval_tree(tree["args"][1], state)
+      return ("boolean", ops.is_true(t, v)), state
+  elif tree["op"] == 'and':
+    (t, v), state = eval_tree(tree["args"][0], state)
+    if not ops.is_true(t, v):
+      return ("boolean", False), state
+    else:
+      (t, v), state = eval_tree(tree["args"][1], state)
+      return ("boolean", ops.is_true(t, v)), state
+  elif tree["op"] == '!':
+    (t, v), state = eval_tree(tree["args"][0], state)
+    if t == "list":
+      mstate = {}
+      mstate.update(state)
+      mstate['@'] = v
+      results = []
+      for i, val in enumerate(v):
+        mstate['#'] = ("int", i)
+        mstate['?'] = val
+        (rt, rv), mstate = eval_tree(tree["args"][1], mstate)
+        results.append((rt, rv))
+
+      del mstate['#']
+      del mstate['?']
+      del mstate['@']
+      state.update(mstate)
+      return ("list", results), state
+    elif t == "dict":
+      mstate = {}
+      mstate.update(state)
+      mstate['@'] = v
+      results = {}
+      for k in v:
+        mstate['#'] = k
+        mstate['?'] = v[k]
+        (rt, rv), mstate = eval_tree(tree["args"][1], mstate)
+        results[k] = (rt, rv)
+
+      del mstate['#']
+      del mstate['?']
+      del mstate['@']
+      state.update(mstate)
+      return ("dict", results), state
+    else:
+      raise ValueError("Cannot map over value: {}".format((t, v)))
+
+  # Get the recursion out of the way:
+  arg_values = []
+  for a in tree["args"]:
+    (at, av), state = eval_tree(a, state)
+    arg_values.append((at, av))
+
+  # Operator implementations:
+  return ops.op_result(tree["op"], state, *arg_values)
 
 
 def eval_expr(expr, story, state):
@@ -763,11 +815,32 @@ def eval_expr(expr, story, state):
 
   pt = parse_expr(expr)
 
+  return eval_tree(pt, state)
+
 def eval_macro(name, args, story, state):
   """
   Evaluates the macro with the given name in the context of the given story,
   feeding in the given arguments and using the given state. A return-value,
   updated-state pair is returned.
+
+  Exmaples:
+    ```?
+    eval_macro(
+      "if",
+      ["True", "1", "else", "0"],
+      eval( # Fake object with .nodes and .title (without importing story):
+        "[exec('class T: pass\\\\nt = T()\\\\nt.nodes = []"
+      + "\\\\nt.title=\\\"_\\\"'), "
+      + "eval('t')][1]"
+      ),
+      {}
+    )
+    ```=
+    (
+      1,
+      {}
+    )
+    ```
   """
   state = copy.deepcopy(state)
 
@@ -814,11 +887,12 @@ def eval_macro(name, args, story, state):
       try:
         value, state = BUILTINS[name](story, state, *args)
       except:
-        value = error(
+        value, state = error(
           "Error calling built-in '{}' with arguments:\n{}".format(
             name,
             '\n'.join(str(a) for a in args)
-          )
+          ),
+          state
         )
     else:
       # Unrecognized macro: expands to error text
@@ -904,5 +978,7 @@ def error(message, state):
   """
   message = "Error: " + message
   exp = "<<{}>>".format(message)
+  if "_errors_" not in state:
+    state["_errors_"] = []
   state["_errors_"].append(message)
   return exp, state

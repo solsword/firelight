@@ -52,10 +52,14 @@ def dedent(string, ts=4):
       c, rest = rest[0], rest[1:]
       if c == " ":
         removed += 1
-      elif c == " ":
-        removed += 4
+      elif c == "\t":
+        removed += ts
       else:
-        raise RuntimeWarning("Lost count while removing indentation.")
+        raise RuntimeWarning(
+          "Lost count while removing indentation from:\n'''\n{}\n'''".format(
+            string.replace(' ', '␣').replace('\t', '␉').replace('\r', '␍')
+          )
+        )
         break
 
     if result == None:
