@@ -609,9 +609,9 @@ def parse_expr(expr):
   Parses a macro expression into a parse tree of operations.
 
   Examples:
-    ```
+    ```?
     parse_expr("1 + 2")
-    ```
+    ```=
     {
       "state": "complete",
       "grouped": True,
@@ -630,9 +630,9 @@ def parse_expr(expr):
         }
       ]
     }
-    ```
+    ```?
     parse_expr("'one' or False")
-    ```
+    ```=
     {
       "state": "complete",
       "grouped": True,
@@ -651,9 +651,9 @@ def parse_expr(expr):
         }
       ]
     }
-    ```
+    ```?
     parse_expr("1 * 2 + 3")
-    ```
+    ```=
     {
       "state": "complete",
       "grouped": True,
@@ -685,9 +685,9 @@ def parse_expr(expr):
         }
       ]
     }
-    ```
+    ```?
     parse_expr("1 + 2 * 3")
-    ```
+    ```=
     {
       "state": "complete",
       "grouped": True,

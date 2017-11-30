@@ -6,6 +6,21 @@ Various utility functions.
 
 import re
 
+def or_strlist(alternatives):
+  """
+  Returns a string listing out alternatives, using commas naturally depending
+  on the number of alternatives given. Returns an empty string if given an
+  empty list.
+  """
+  if len(alternatives) == 0:
+    return ""
+  elif len(alternatives) == 1:
+    return alternatives[0]
+  elif len(alternatives) == 2:
+    return alternatives[0] + " or " + alternatives[1]
+  else:
+    return ", ".join(alternatives[:-1]) + ", or " + alternatives[-1]
+
 def dedent(string, ts=4):
   """
   Removes common leading whitespace from the given string. Each tab counts as
@@ -68,11 +83,23 @@ def matching_brace(src, idx, op='(', cl=')'):
 
   Returns the index of the matching brace found.
 
-  Example:
-    ```
-    matching_brace("(()())", 0)
-    ```
-    5
+  Examples:
+    ```>
+    matching_brace("(()())", 0) == 5
+    ```>
+    matching_brace("(())", 0) == 3
+    ```>
+    matching_brace("(())", 1) == 2
+    ```>
+    matching_brace("()()", 0) == 1
+    ```>
+    matching_brace("()()", 2) == 3
+    ```>
+    matching_brace("(()())", 0) == 5
+    ```x
+    matching_brace("((())", 0)
+    ```!
+    UnmatchedError
     ```
   """
   layer = 0
@@ -129,9 +156,9 @@ def string_literal(src, idx, qc='"'):
   of the found string and the string content.
 
   Example:
-    ```
+    ```?
     string_literal(r'"two,\\"three\\""', 0)
-    ```
+    ```=
     (14, "two,\\"three\\"")
     ```
   """
@@ -183,9 +210,9 @@ def split_unquoted(src, delim=',', qc='"'):
   and trailing whitespace.
 
   Example:
-    ```
+    ```?
     split_unquoted(r'one, "two,three", four "five"', delim=',', qc='"')
-    ```
+    ```=
     ["one", "two,three", 'four "five"']
     ```
   """

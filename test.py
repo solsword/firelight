@@ -6,6 +6,7 @@ Unit tests.
 """
 
 import traceback
+import sys
 
 import utils
 
@@ -18,64 +19,12 @@ from state import StateChange, SetValue, IncrementValue, InvertValue
 from parse import reflow, remove_comments
 from parse import parse_story, render_story, parse_first_node, render_node
 
-from macro import parse_expr
+import macro
 
 all_tests = []
 def test(f):
   all_tests.append(f)
   return f
-
-@test
-def test_matching_brace():
-  idx = utils.matching_brace("(())", 0)
-  assert idx == 3, "Found wrong matching brace."
-
-  idx = utils.matching_brace("(())", 1)
-  assert idx == 2, "Found wrong matching brace."
-
-  idx = utils.matching_brace("()()", 0)
-  assert idx == 1, "Found wrong matching brace."
-
-  idx = utils.matching_brace("()()", 2)
-  assert idx == 3, "Found wrong matching brace."
-
-  idx = utils.matching_brace("(()())", 0)
-  assert idx == 5, "Found wrong matching brace."
-
-  try:
-    idx = utils.matching_brace("((())", 0)
-    assert False, "Found a false match ({}).".format(idx)
-  except utils.UnmatchedError:
-    pass
-
-  return True
-
-def mktest_eval_equals(fcn):
-  @test
-  def test_function():
-    test_stuff = fcn.__doc__.split("```")
-
-    gla = dict(globals())
-    gla[fcn.__name__] = fcn
-    tfirst = eval(utils.dedent(test_stuff[1]), gla)
-    tsecond = eval(utils.dedent(test_stuff[2]), gla)
-
-    assert tfirst == tsecond, (
-      (
-        "First object doesn't match second:\n```\n{}\n```\n{}\n```"
-        "\nDifferences:\n  {}"
-      ).format(str(tfirst), str(tsecond), "\n  ".join(diff(tfirst, tsecond)))
-    )
-
-    return True
-
-  test_function.__name__ = "test_" + fcn.__name__.lower() + "_example"
-
-for f in [
-  utils.string_literal,
-  utils.split_unquoted,
-]:
-  mktest_eval_equals(f)
 
 def mktest_packable(cls):
   @test
@@ -235,26 +184,101 @@ def test_parse_story():
 
   return True
 
-@test
-def test_parse_expr():
-  test_stuff = parse_expr.__doc__.split("```")
+def mktest_docstring(fcn):
+  """
+  Generic function for testing examples from docstrings. Looks for
+  triple-backtick-quoted regions that are typed by their initial characters.
+  There are three types of test:
+    
+    '>' indicates a test that must simply evaluate to a non-False value.
+    '?' indicates an equality test, it should be followed by one or more '='
+        blocks, which will each be compared against the '?' block after
+        evaluation. Each '=' block must evaluate to a value equal to the '?'
+        block.
+    'x' indicates an error pathway check; this block should throw an exception
+        when evaluated. Use one or more following '!' blocks to name the
+        acceptable exception(s).
 
-  for i in range(1, len(test_stuff), 2):
-    tfcn = eval(utils.dedent(test_stuff[i]))
-    traw = eval(utils.dedent(test_stuff[i+1]))
+  All test evaluation will take place in the context of the module that the
+  given function comes from.
+  """
+  @test
+  def the_test():
+    nonlocal fcn
+    test_stuff = fcn.__doc__.split("```")
+    native_module = sys.modules[fcn.__module__]
+    native_context = native_module.__dict__
 
-    assert tfcn == traw, (
-      (
-        "parse_expr result didn't match:\n```\n{}\n```\n{}\n```"
-        "\nDifferences:\n  {}"
-      ).format(
-        tfcn,
-        traw,
-        "\n  ".join(diff(tfcn, traw))
-      )
-    )
+    test_eval_true = []
+    test_cmp_equal = []
+    test_raises = []
+    for raw in test_stuff:
+      test = raw.strip()
+      if not test or test[0] not in ">?=x!":
+        continue
+      ttype = test[0]
+      test = utils.dedent(test[1:]).strip()
+      if ttype == '>':
+        test_eval_true.append(test)
+      elif ttype == '?':
+        test_cmp_equal.append((test, []))
+      elif ttype == '=':
+        if test_cmp_equal:
+          test_cmp_equal[-1][1].append(test)
+        else:
+          test_cmp_equal.append((test, []))
+      elif ttype == 'x':
+        test_raises.append((test, []))
+      elif ttype == '!':
+        if test_raises:
+          test_raises[-1][1].append(test)
+        else:
+          test_raises.append((test, []))
 
-  return True
+    for test in test_eval_true:
+      assert eval(test, native_context), "Eval test failed:\n" + test
+
+    for test, against in test_cmp_equal:
+      base = eval(test, native_context)
+      for ag in against:
+        agval = eval(ag, native_context)
+        assert base == agval, (
+          (
+            "Test items not equal:\n```\n{}\n```\n{}\n```"
+            "\nDifferences:\n  {}"
+          ).format(
+            base,
+            agval,
+            "\n  ".join(diff(base, agval))
+          )
+        )
+
+    for test, accept in test_raises:
+      accept = tuple(eval(a, native_context) for a in accept)
+      try:
+        eval(test, native_context)
+        assert False, "Test failed to raise an error. Expected:\n  {}".format(
+          utils.or_strlist(a.__name__ for a in alternatives)
+        )
+      except accept:
+        pass
+      except Exception as e:
+        assert False, "Test raised unexpected {} error.".format(
+          e.__class__.__name__
+        )
+
+    return True
+
+  the_test.__name__ = "test_" + fcn.__name__
+  return the_test
+
+for f in [
+  utils.string_literal,
+  utils.split_unquoted,
+  utils.matching_brace,
+  macro.parse_expr,
+]:
+  mktest_docstring(f)
 
 def main():
   for t in all_tests:
