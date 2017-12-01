@@ -6,6 +6,7 @@ See modules/help.fls for a description of the macro system.
 
 import re
 import copy
+import traceback
 
 import utils
 
@@ -17,125 +18,18 @@ INT_CONSTANT = re.compile(r"([+-])?(0[xo])?([0-9A-Fa-f])+")
 
 FLOAT_CONSTANT = re.compile(r"([+-])?([0-9]+)(\.[0-9]*)?([eE][+-]?[0-9]+)?")
 
-def mb_eval(story, state, *args):
-  """
-  The 'eval' macro builtin. Evaluates each argument, returning a single value
-  or a list of values if there is more than one argument.
-  """
-  if len(args) == 1:
-    return eval_expr(arg, story, state)
-  else:
-    result = []
-    for arg in args:
-      val, state = eval_expr(arg, story, state)
-      result.append(val)
-    return result, state
+BUILTINS = {}
 
-def mb_cat(story, state, *args):
+def mb(f):
   """
-  The 'cat' macro builtin. Evaluates each argument as text, and returns the
-  results concatenated into a list.
+  Decorator for registering builtins.
   """
-  results = []
-  for arg in args:
-    val, state = eval_text(arg, story, state)
-    results.append(val)
-  return ''.join(str(r) for r in results)
-
-# TODO: Catch exceptions generated w/ # of arguments
-def mb_lookup(story, state, obj, key):
-  """
-  The 'lookup' macro builtin. Evaluates two arguments as expressions and looks
-  up the second result within the first.
-  """
-  obj, state = eval_expr(obj, story, state)
-  key, state = eval_expr(key, story, state)
-  if key in obj:
-    return obj[key], state
-  else:
-    return (
-      error("Lookup failed to find '{}' in '{}'.".format(key, obj)),
-      state
-    )
-
-def mb_context(story, state, n):
-  """
-  The 'context' macro builtin. Returns the value of the nth context variable,
-  after evaluating the given expression to find n.
-  """
-  n, state = eval_expr(n, story, state)
-  if n >= 1 and n <= len(state["_context"]):
-    return state["_context"][n-1], state
-  else:
-    # Invalid indices just result in an empty string.
-    return None, state
-
-def mb_if(story, state, *args):
-  """
-  The 'if' macro builtin. Evaluates every odd argument as a condition, also
-  accepting the special value 'else', and resolves to the evaluation (as text)
-  of the first even argument whose condition matched. Unmatched even arguments
-  are not evaluated.
-  """
-  odd = [args[i] for i in range(0, len(args), 2)]
-  even = [args[i] for i in range(1, len(args), 2)]
-  print("Odd/even:", odd, even)
-  # Leftover becomes an implicit else case:
-  # TODO: Issue warning here?
-  el = None
-  if len(odd) > len(even):
-    el = odd.pop()
-
-  for i, arg in enumerate(odd):
-    print("EE", arg)
-    try:
-      val, state = eval_expr(arg, story, state)
-    except Exception as e:
-      import traceback
-      import sys
-      #traceback.print_tb(sys.last_traceback)
-      traceback.print_tb(sys.exc_info()[2])
-      print("ERR", e)
-    print("EE->", val)
-    if val: # the string "else" will pass this test
-      return eval_text(even[i], story, state)
-
-  # No condition was true:
-  if el is None:
-    return None, state
-  else:
-    return eval_expr(el, story, state)
-
-def mb_once(story, state, arg):
-  """
-  The 'once' macro builtin. Evaluates its argument as text, but only if this is
-  the first time that the current node has been visited. Otherwise it returns
-  an empty string.
-  """
-  if state["_first"]:
-    return eval_text(arg, story, state)
-  else:
-    return "", state
-
-def mb_again(story, state, arg):
-  """
-  The 'again' macro builtin. The converse of mb_once; it evaluates its argument
-  as text only on non-initial visits to a node.
-  """
-  if state["_first"]:
-    return "", state
-  else:
-    return eval_text(arg, story, state)
-
-BUILTINS = {
-  "eval": mb_eval,
-  "cat": mb_cat,
-  "lookup": mb_lookup,
-  "context": mb_context,
-  "if": mb_if,
-  "once": mb_once,
-  "again": mb_again,
-}
+  global BUILTINS
+  fn = f.__name__
+  if fn.endswith('_'):
+    fn = fn[:-1]
+  BUILTINS[fn] = f
+  return f
 
 def to_string(value):
   """
@@ -167,7 +61,7 @@ def lex_expr(expr):
       m = MACRO_START.search(expr, i)
       start = m.start()
       if start == i:
-        end = utils.matching_brace(src, i, '(', ')')
+        end = utils.matching_brace(expr, i, '(', ')')
         units.append(("call", expr[start:end+1]))
         i = end
       else:
@@ -265,6 +159,9 @@ def lex_expr(expr):
   return units
 
 class ParseError(Exception):
+  """
+  A ParseError indicates a problem that occurs when parsing an expression.
+  """
   pass
 
 def parse_next_val(units):
@@ -404,20 +301,6 @@ and top not in ("value", "opval")
       return nr
 
   return None
-
-def pt_string(parse_tree, indent=0):
-  result = ''
-  for k in parse_tree:
-    if k not in ("parent", "args"):
-      result += "{}: {}\n".format(k, parse_tree[k])
-
-  if "args" in parse_tree:
-    ind = ' '*(indent+2)
-    result += "args:\n"
-    for a in parse_tree["args"]:
-      result += ('\n' + ind).join((ind + pt_string(a, indent+2)).split('\n'))
-
-  return result
 
 def parse_units(units, ungrouped=False):
   """
@@ -735,6 +618,12 @@ def parse_expr(expr):
   units = lex_expr(expr)
   return scrub_parents(parse_units(units))
 
+class EvalError(Exception):
+  """
+  An EvalError indicates a problem that occurs when evaluating an expression.
+  """
+  pass
+
 def eval_tree(tree, state):
   """
   Evaluates a parse tree and returns an actual value. Use parse_expr to create
@@ -794,7 +683,7 @@ def eval_tree(tree, state):
       state.update(mstate)
       return ("dict", results), state
     else:
-      raise ValueError("Cannot map over value: {}".format((t, v)))
+      raise EvalError("Cannot map over value: {}".format((t, v)))
 
   # Get the recursion out of the way:
   arg_values = []
@@ -810,6 +699,21 @@ def eval_expr(expr, story, state):
   """
   Evaluates an expression, which may include both macro calls and operators.
   Returns a result-value, updated-state pair.
+
+  Exmaples:
+    ```?
+    eval_expr(
+      '1',
+      eval( # Fake object with .nodes and .title (without importing story):
+        "[exec('class T: pass\\\\nt = T()\\\\nt.nodes = []"
+      + "\\\\nt.title=\\\"_\\\"'), "
+      + "eval('t')][1]"
+      ),
+      {}
+    )
+    ```=
+    (('int', 1), {})
+    ```
   """
   state = copy.deepcopy(state)
 
@@ -823,7 +727,7 @@ def eval_macro(name, args, story, state):
   feeding in the given arguments and using the given state. A return-value,
   updated-state pair is returned.
 
-  Exmaples:
+  Examples:
     ```?
     eval_macro(
       "if",
@@ -837,8 +741,8 @@ def eval_macro(name, args, story, state):
     )
     ```=
     (
-      1,
-      {}
+      "1",
+      {"_context": []}
     )
     ```
   """
@@ -886,11 +790,19 @@ def eval_macro(name, args, story, state):
       # A built-in macro
       try:
         value, state = BUILTINS[name](story, state, *args)
-      except:
+      except Exception as e:
         value, state = error(
-          "Error calling built-in '{}' with arguments:\n{}".format(
+          "Error calling built-in '{}' with arguments:\n{}\nDetails:\n{}"
+          .format(
             name,
-            '\n'.join(str(a) for a in args)
+            '\n'.join(str(a) for a in args),
+            ''.join(
+              traceback.format_exception(
+                type(e),
+                e,
+                e.__traceback__
+              )
+            )
           ),
           state
         )
@@ -928,7 +840,7 @@ def eval_text(text, story, state, context=None):
   i = 0
   bits = []
   while i < len(text):
-    ms = MACRO_START.search(src, i)
+    ms = MACRO_START.search(text, i)
     if not ms: # no matches means no expansion needed
       bits.append(text[i:])
       i = len(text) # we're done
@@ -936,7 +848,7 @@ def eval_text(text, story, state, context=None):
       # There's a match:
       start = ms.start()
       try:
-        end = utils.matching_brace(src, start, '(', ')')
+        end = utils.matching_brace(text, start, '(', ')')
       except utils.UnmatchedError as e:
         ectx = text[max(0, i-10):i+50]
         ectx = ectx \
@@ -961,7 +873,7 @@ def eval_text(text, story, state, context=None):
 
       # eval macro:
       macro_name = ms.group(1)
-      macro_content = src[ms.end():end]
+      macro_content = text[ms.end():end]
       macro_args = utils.split_unquoted(macro_content, delim=':', qc='"')
 
       mv, state = eval_macro(macro_name, macro_args, story, state)
@@ -982,3 +894,127 @@ def error(message, state):
     state["_errors_"] = []
   state["_errors_"].append(message)
   return exp, state
+
+def pt_string(parse_tree, indent=0):
+  result = ''
+  for k in parse_tree:
+    if k not in ("parent", "args"):
+      result += "{}: {}\n".format(k, parse_tree[k])
+
+  if "args" in parse_tree:
+    ind = ' '*(indent+2)
+    result += "args:\n"
+    for a in parse_tree["args"]:
+      result += ('\n' + ind).join((ind + pt_string(a, indent+2)).split('\n'))
+
+  return result
+
+# Macro built-in functions:
+# -------------------------
+
+@mb
+def eval_(story, state, *args):
+  """
+  The 'eval' macro builtin. Evaluates each argument, returning a single value
+  or a list of values if there is more than one argument.
+  """
+  if len(args) == 1:
+    return eval_expr(arg, story, state)
+  else:
+    result = []
+    for arg in args:
+      val, state = eval_expr(arg, story, state)
+      result.append(val)
+    return result, state
+
+@mb
+def cat(story, state, *args):
+  """
+  The 'cat' macro builtin. Evaluates each argument as text, and returns the
+  results concatenated into a list.
+  """
+  results = []
+  for arg in args:
+    val, state = eval_text(arg, story, state)
+    results.append(val)
+  return ''.join(str(r) for r in results)
+
+# TODO: Catch exceptions generated w/ # of arguments
+@mb
+def lookup(story, state, obj, key):
+  """
+  The 'lookup' macro builtin. Evaluates two arguments as expressions and looks
+  up the second result within the first.
+  """
+  obj, state = eval_expr(obj, story, state)
+  key, state = eval_expr(key, story, state)
+  if key in obj:
+    return obj[key], state
+  else:
+    return (
+      error("Lookup failed to find '{}' in '{}'.".format(key, obj)),
+      state
+    )
+
+@mb
+def context(story, state, n):
+  """
+  The 'context' macro builtin. Returns the value of the nth context variable,
+  after evaluating the given expression to find n.
+  """
+  n, state = eval_expr(n, story, state)
+  if n >= 1 and n <= len(state["_context"]):
+    return state["_context"][n-1], state
+  else:
+    # Invalid indices just result in an empty string.
+    return None, state
+
+@mb
+def if_(story, state, *args):
+  """
+  The 'if' macro builtin. Evaluates every odd argument as a condition, also
+  accepting the special value 'else', and resolves to the evaluation (as text)
+  of the first even argument whose condition matched. Unmatched even arguments
+  are not evaluated.
+  """
+  odd = [args[i] for i in range(0, len(args), 2)]
+  even = [args[i] for i in range(1, len(args), 2)]
+  # Leftover becomes an implicit else case:
+  # TODO: Issue warning here?
+  el = None
+  if len(odd) > len(even):
+    el = odd.pop()
+
+  for i, arg in enumerate(odd):
+    val, state = eval_expr(arg, story, state)
+    if val: # the string "else" will pass this test
+      return eval_text(even[i], story, state)
+
+  # No condition was true:
+  if el is None:
+    return None, state
+  else:
+    return eval_expr(el, story, state)
+
+@mb
+def once(story, state, arg):
+  """
+  The 'once' macro builtin. Evaluates its argument as text, but only if this is
+  the first time that the current node has been visited. Otherwise it returns
+  an empty string.
+  """
+  if state["_first"]:
+    return eval_text(arg, story, state)
+  else:
+    return "", state
+
+@mb
+def again(story, state, arg):
+  """
+  The 'again' macro builtin. The converse of once: it evaluates its argument
+  as text only on non-initial visits to a node.
+  """
+  if state["_first"]:
+    return "", state
+  else:
+    return eval_text(arg, story, state)

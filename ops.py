@@ -34,9 +34,15 @@ OPERATOR_PRECEDENCE = {
 
 ALL_OPS = {}
 
+class OpError(Exception):
+  """
+  An OpError indicates a problem with an operator.
+  """
+  pass
+
 def op(op, *types):
   """
-  Decorator for functions that implements the given operator between the given
+  Decorator for functions that implement the given operator between the given
   types. Resolution order follows definition order.
   """
   def decorate(f):
@@ -52,7 +58,7 @@ def resolve_op(op, *types):
   Returns the appropriate function for doing operation op on the given types.
   """
   if op not in ALL_OPS:
-    raise ValueError("Unknown operation '{}'".format(op))
+    raise OpError("Unknown operation '{}'".format(op))
 
   candidates = ALL_OPS[op]
   for c in candidates:
@@ -68,7 +74,7 @@ def resolve_op(op, *types):
     ):
       return c[-1]
 
-  raise ValueError("No match for operator '{}' on types {}".format(op, types))
+  raise OpError("No match for operator '{}' on types {}".format(op, types))
 
 def op_result(op, state, *args):
   """

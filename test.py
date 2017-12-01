@@ -277,6 +277,7 @@ for f in [
   utils.split_unquoted,
   utils.matching_brace,
   macro.parse_expr,
+  macro.eval_expr,
   macro.eval_macro,
 ]:
   mktest_docstring(f)
