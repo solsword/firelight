@@ -40,6 +40,13 @@ class OpError(Exception):
   """
   pass
 
+class Operator:
+  """
+  A class representing an operator.
+  """
+  def __init__(self, op):
+    self.op = op
+
 def op(op, *types):
   """
   Decorator for functions that implement the given operator between the given
@@ -53,7 +60,7 @@ def op(op, *types):
     return f
   return decorate
 
-def resolve_op(op, *types):
+def resolve_op(op, *args):
   """
   Returns the appropriate function for doing operation op on the given types.
   """
@@ -65,175 +72,176 @@ def resolve_op(op, *types):
     if len(c) != len(args)+1:
       continue
     if all(
-      (
-        c[i] == '*'
-     or (isinstance(c[i], tuple) and types[i] in c[i])
-     or types[i] == c[i]
-      )
-        for i in range(len(types))
+      (c[i] == '*' or isinstance(args[i], c[i]))
+        for i in range(len(args))
     ):
       return c[-1]
 
-  raise OpError("No match for operator '{}' on types {}".format(op, types))
+  raise OpError(
+    "No match for operator '{}' on types {}".format(
+      op,
+      [ type(a) for a in args ]
+    )
+  )
 
 def op_result(op, state, *args):
   """
   Returns the result (using resolve_op) of an operation between one or more
   (type, value) pairs.
   """
-  types = [ a[0] for a in args ]
-  f = resolve_op(op, types)
+  f = resolve_op(op, *args)
   return f(state, *args)
 
-def is_true(typ, val):
+def is_true(val):
   """
   Truth-value assignment (just copies Python).
   """
   return bool(val)
 
 def is_numeric(typ):
-  return typ in ("int", "float")
+  return typ in (int, float)
 
 # Unary operators
 # ---------------
 
 @op('not', "*")
 def u_not(state, val):
-  t, v = val
-  return ("boolean", not is_true(v)), state
+  return ("boolean", not is_true(val)), state
 
 @op('+', "*")
 def u_plus(state, val):
-  t, v = val
   # unary-plus is a no-op
-  return (t, v), state
+  return val, state
 
-@op('-', ("int", "float"))
+@op('-', (int, float))
 def u_minus(state, val):
-  t, v = val
-  return (t, -v), state
+  return -val, state
 
-@op('~', "int")
+@op('~', int)
 def u_flip(state, val):
-  t, v = val
-  return (t, ~v), state
+  return ~val, state
 
 # Math operators
 # --------------
 
-@op('+', ("int", "float"), ("int", "float"))
+@op('+', (int, float), (int, float))
 def plus_nn(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("float" if "float" in (t1, t2) else "int", v1 + v2), state
-
-@op('-', ("int", "float"), ("int", "float"))
-def minus_nn(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("float" if "float" in (t1, t2) else "int", v1 - v2), state
-
-@op('*', ("int", "float"), ("int", "float"))
-def times_nn(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("float" if "float" in (t1, t2) else "int", v1 * v2), state
-
-@op('/', ("int", "float"), ("int", "float"))
-def div_nn(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  rv = v1 / v2
-  if "float" in (t1, t2) or (rv != int(rv)):
-    rt = "float"
+  if float in (type(lhs), type(rhs)):
+    return float(lhs + rhs), state
   else:
-    rt = "int"
-  return (rt, rv), state
+    return int(lhs + rhs), state
 
-@op('//', ("int", "float"), ("int", "float"))
+@op('-', (int, float), (int, float))
+def minus_nn(state, lhs, rhs):
+  if float in (type(lhs), type(rhs)):
+    return float(lhs - rhs), state
+  else:
+    return int(lhs - rhs), state
+
+@op('*', (int, float), (int, float))
+def times_nn(state, lhs, rhs):
+  if float in (type(lhs), type(rhs)):
+    return float(lhs * rhs), state
+  else:
+    return int(lhs * rhs), state
+
+@op('/', (int, float), (int, float))
 def div_nn(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("int", int(v1 // v2)), state
+  rv = lhs / rhs
+  if float in (type(lhs), type(rhs)) or (rv != int(rv)):
+    rt = float
+  else:
+    rt = int
+  return rt(rv), state
 
-@op('**', ("int", "float"), ("int", "float"))
+@op('//', (int, float), (int, float))
+def div_nn(state, lhs, rhs):
+  return ("int", int(lhs // rhs)), state
+
+@op('**', (int, float), (int, float))
 def pow_nn(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("float" if "float" in (t1, t2) or v2 < 0 else "int", v1 ** v2), state
+  if float in (type(lhs), type(rhs)) or rhs < 0:
+    return float(lhs ** rhs), state
+  else:
+    return int(lhs ** rhs), state
 
-@op('%', ("int", "float"), ("int", "float"))
+@op('%', (int, float), (int, float))
 def mod_nn(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("float" if "float" in (t1, t2) else "int", v1 % v2), state
+  if float in (type(lhs), type(rhs)):
+    return float(lhs % rhs), state
+  else:
+    return int(lhs % rhs), state
 
 # Comparisons
 # -----------
 
 @op('=', '*', '*')
 def eq(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("boolean", t1 == t2 and v1 == v2)
+  return lhs == rhs, state
 
 @op('!=', '*', '*')
 def neq(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("boolean", t1 != t2 or v1 != v2)
+  return lhs != rhs, state
 
 @op('<', '*', '*')
 def less(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  if t1 == t2 or (is_numeric(t1) and is_numeric(t2)):
+  if (
+    isinstance(lhs, type(rhs))
+ or isinstance(rhs, type(lhs))
+ or (is_numeric(type(lhs)) and is_numeric(type(rhs)))
+  ):
     try:
-      return ("boolean", v1 < v2)
+      return lhs < rhs, state
     except TypeError:
-      return False
+      return False, state
   else:
     # TODO: Use string comparison here?
-    return False
+    return False, state
 
 @op('>', '*', '*')
 def greater(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  if t1 == t2 or (is_numeric(t1) and is_numeric(t2)):
+  if (
+    isinstance(lhs, type(rhs))
+ or isinstance(rhs, type(lhs))
+ or (is_numeric(type(lhs)) and is_numeric(type(rhs)))
+  ):
     try:
-      return ("boolean", v1 > v2)
+      return lhs > rhs, state
     except TypeError:
-      return False
+      return False, state
   else:
     # TODO: Use string comparison here?
-    return False
+    return False, state
 
 @op('<=', '*', '*')
 def leq(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  if t1 == t2 or (is_numeric(t1) and is_numeric(t2)):
+  if (
+    isinstance(lhs, type(rhs))
+ or isinstance(rhs, type(lhs))
+ or (is_numeric(type(lhs)) and is_numeric(type(rhs)))
+  ):
     try:
-      return ("boolean", v1 <= v2)
+      return lhs <= rhs, state
     except TypeError:
-      return False
+      return False, state
   else:
     # TODO: Use string comparison here?
-    return False
+    return False, state
 
 @op('>=', '*', '*')
 def geq(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  if t1 == t2 or (is_numeric(t1) and is_numeric(t2)):
+  if (
+    isinstance(lhs, type(rhs))
+ or isinstance(rhs, type(lhs))
+ or (is_numeric(type(lhs)) and is_numeric(type(rhs)))
+  ):
     try:
-      return ("boolean", v1 >= v2)
+      return lhs >= rhs, state
     except TypeError:
-      return False
+      return False, state
   else:
     # TODO: Use string comparison here?
-    return False
+    return False, state
 
 # Note: boolean operators are handled in macro.py because they're
 # short-circuiting.
@@ -241,146 +249,112 @@ def geq(state, lhs, rhs):
 # Bitwise operators
 # -----------------
 
-@op('&', "int", "int")
+@op('&', int, int)
 def bit_and(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("int", v1 & v2), state
+  return lhs & rhs, state
 
-@op('|', "int", "int")
+@op('|', int, int)
 def bit_and(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("int", v1 | v2), state
+  return lhs | rhs, state
 
-@op('^', "int", "int")
+@op('^', int, int)
 def bit_and(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("int", v1 ^ v2), state
+  return lhs ^ rhs, state
 
 # '~' is defined above with the other unary operators
 
 # String operators
 # ----------------
 
-@op('+', "string", "string")
+@op('+', str, str)
 def plus_str(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("string", v1 + v2), state
+  return lhs + rhs, state
 
-@op('-', "string", "string")
+@op('-', str, str)
 def minus_str(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("string", v1.replace(v2, "")), state
+  return lhs.replace(rhs, ""), state
 
-@op('*', "string", "int")
+@op('*', str, int)
 def times_str(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("string", v1 * v2), state
+  return lhs * rhs, state
 
-@op('/', "string", "string")
+@op('/', str, str)
 def search_str(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("boolean", re.search(v2, v1) != None), state
+  return re.search(rhs, lhs) != None, state
 
-@op('//', "string", "string")
+@op('//', str, str)
 def search_simple_str(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("boolean", v2 in v1), state
+  return rhs in lhs, state
 
-@op('~', "string", "string", "string")
+@op('~', str, str, str)
 def replace_str(state, lhs, rhs, rrhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  t3, v3 = rrhs
-  return ("string", re.sub(v2, v3, v1)), state
+  return re.sub(rhs, rrhs, lhs), state
 
-@op('~~', "string", "string", "string")
+@op('~~', str, str, str)
 def replace_simple_str(state, lhs, rhs, rrhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  t3, v3 = rrhs
-  return ("string", v1.replace(v2, v3)), state
+  return lhs.replace(rhs, rrhs), state
 
-@op('^', "string", "string")
+@op('^', str, str)
 def split_str(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("string", re.split(v2, v1)), state
+  return re.split(rhs, lhs), state
 
-@op('^^', "string", "string")
+@op('^^', str, str)
 def split_str(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("string", v1.split(v2)), state
+  return lhs.split(rhs), state
 
 # List operators
 # --------------
 
-@op('+', "list", "list")
+@op('+', list, list)
 def cat_lst(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("list", v1 + v2), state
+  return lhs + rhs, state
 
-@op('.', "list", "*")
+@op('.', list, "*")
 def app_lst(state, lhs, rhs):
-  _, lst = lhs
-  return ("list", lst[:] + [ rhs ]), state
+  return ("list", lhs[:] + [ rhs ]), state
 
-@op('*', "list", "int")
+@op('*', list, int)
 def times_lst(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
   result = []
-  for i in range(v2):
-    for v in v1:
+  for i in range(rhs):
+    for v in lhs:
       result.append(v)
-  return ("list", result), state
+  return result, state
 
-@op('/', "list", "*")
+@op('/', list, "*")
 def search_lst(state, lhs, rhs):
-  _, lst = lhs
-  return ("boolean", rhs in lst), state
+  return rhs in lhs, state
 
-@op('~', "list", "*", "*")
+@op('~', list, "*", "*")
 def replace_lst(state, lhs, find, repl):
-  _, lst = lhs
   result = []
-  for val in lst:
+  for val in lhs:
     if val == find:
       result.append(repl)
     else:
       result.append(val)
-  return ("list", result), state
+  return result, state
 
-@op('|', "list", "op", "*")
-def reduce_lst(state, lhs, rhs, rrhs):
-  _, lst = lhs
-  _, op = rhs
-  typ, val = rrhs
+@op('|', list, Operator, "*")
+def reduce_lst(state, lst, op, val):
   # Special defaults for zero-length list:
   if len(lst) == 0:
-    if typ == "int":
-      return ("int", 0), state
-    elif typ == "float":
-      return ("float", 0), state
-    elif typ == "string":
-      return ("string", ""), state
-    elif typ == "list":
-      return ("list", []), state
-    elif typ == "dict":
-      return ("dict", {}), state
+    if isinstance(val, int):
+      return 0, state
+    elif isinstance(val, float):
+      return 0.0, state
+    elif isinstance(val, str):
+      return "", state
+    elif isinstance(val, list):
+      return [], state
+    elif isinstance(val, dict):
+      return {}, state
+    else:
+      return None, state
 
   result = lst[0]
   for lv in lst[1:]:
-    result, state = op_result(op, state, result, (typ, val))
+    result, state = op_result(op, state, result, val)
     result, state = op_result(op, state, result, lv)
 
   return result, state
@@ -390,63 +364,50 @@ def reduce_lst(state, lhs, rhs, rrhs):
 # Dictionary operators
 # --------------------
 
-@op('+', "dict", "dict")
+@op('+', dict, dict)
 def union_dict(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
   result = {}
-  result.update(v1)
-  result.update(v2)
-  return ("dict", result), state
+  result.update(lhs)
+  result.update(rhs)
+  return result, state
 
-@op('|', "dict", "dict")
+@op('|', dict, dict)
 def rev_union_dict(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
   result = {}
-  result.update(v2)
-  result.update(v1)
-  return ("dict", result), state
+  result.update(rhs)
+  result.update(lhs)
+  return result, state
 
-@op('&', "dict", "dict")
+@op('&', dict, dict)
 def intersect_dict(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
   result = {}
-  for k in v1:
-    if k in v2:
-      result[k] = v2[k]
-  return ("dict", result), state
+  for k in lhs:
+    if k in rhs:
+      result[k] = rhs[k]
+  return result, state
 
-@op('-', "dict", "dict")
+@op('-', dict, dict)
 def sub_dict(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
   result = {}
-  for k in v1:
-    if k not in v2:
-      result[k] = v1[k]
-  return ("dict", result), state
+  for k in lhs:
+    if k not in rhs:
+      result[k] = lhs[k]
+  return result, state
 
-@op('.', "dict", "*", "*")
+@op('.', dict, "*", "*")
 def ins_dict(state, lhs, key, val):
-  _, dct = lhs
   result = {}
-  result.update(dct)
+  result.update(lhs)
   result[key] = val
-  return ("dict", result), state
+  return result, state
 
 # Default string operators
 # ------------------------
 
-@op('+', "string", "*")
+@op('+', str, "*")
 def plus_str_default(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("string", v1 + str(v2)), state
+  return lhs + str(rhs), state
 
-@op('+', "*", "string")
+@op('+', "*", str)
 def plus_default_str(state, lhs, rhs):
-  t1, v1 = lhs
-  t2, v2 = rhs
-  return ("string", str(v1) + v2), state
+  return str(lhs) + rhs, state

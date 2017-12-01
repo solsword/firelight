@@ -15,6 +15,8 @@ from state import StateChange
 from packable import pack, unpack
 from diffable import diff
 
+import macro
+
 
 def cmd_title(story, node_name, state):
   return (
@@ -31,25 +33,48 @@ STORY_COMMANDS = {
   "/author/": cmd_title,
 }
 
-def format_node(node, highlight="bracket"):
+def display_node(story, node, state, context=None, highlight="bracket"):
   """
-  Returns a string to display to the player for the given story node. The
-  'highlight' argument controls how options that occur within the content are
-  highlighted. Valid values include None (base content used as-is),
-  "bracket" (the default; square brackets will be added around option
-  words), and "link" (option words will be rendered as HTML anchor elements
-  that link to an anchor with their name.)
+  Computes display text for the given node in the given story, including
+  evaluating the node's content. Returns a (display_text, updated_state) pair.
+  The 'context' argument is passed as the _context variable during node
+  evaluation, while the 'highlight' variable controls how options within the
+  text are highlighted (see highlight_content below).
   """
-  content = node.content
+  if isinstance(node, str):
+    node = story.get(node)
+  text, new_state = macro.eval_text(node.content, story, state, context)
+  return (
+    highlight_content(text, node.successors, highlight=highlight),
+    new_state
+  )
+
+def display_transition(story, node, option, state):
+  """
+  Computes transition text for taking the given option at the given node.
+  """
+  next = node.successors[option]
+  # TODO: HERE!
+
+def highlight_content(content, successors, highlight="bracket"):
+  """
+  Returns a string to display to the player for the given content, highlighting
+  the given successors. The 'highlight' argument controls how options that
+  occur within the content are highlighted. Valid values include None (base
+  content used as-is), "bracket" (the default; square brackets will be added
+  around option words), and "link" (option words will be rendered as HTML
+  anchor elements that link to an anchor with their name.)
+  """
+  content = content
   if highlight == "bracket":
-    for opt in node.successors:
+    for opt in successors:
       content = re.sub(
         r"\b{}\b".format(re.escape(opt)),
         lambda _: "[{}]".format(opt), # to treat replacement as a literal
         content
       )
   elif highlight == "link":
-    for opt in node.successors:
+    for opt in successors:
       content = re.sub(
         r"\b{}\b".format(re.escape(opt)),
         lambda _: r'<a href="#{}">{}</a>'.format(opt, opt),
@@ -66,6 +91,8 @@ def fuzzy_match(target, options, cutoff=None):
   is greater than the cutoff.
   """
   best = (None, -1)
+  if target in options:
+    return (target, 0)
   for op in options:
     ed = editdistance.eval(target, op)
     if (best[1] < 0 and (cutoff is None or ed <= cutoff)) or ed < best[1]:
@@ -141,7 +168,7 @@ class StoryNode:
         "The sea calls to you, but you should go home."
       ),
       {
-        "The sea": [ "wading_out", "(set: mood | desolate)" ],
+        "The sea": [ "wading_out", "(set: mood : desolate)" ],
         "go home": "back_home"
       }
     )
@@ -150,7 +177,7 @@ class StoryNode:
       "name": "at_the_beach",
       "content": "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
       "successors": {
-        "The sea": [ "wading_out", "(set: mood | desolate)" ],
+        "The sea": [ "wading_out", "(set: mood : desolate)" ],
         "go home": "back_home"
       }
     }
@@ -247,8 +274,8 @@ class Story:
             "The sea calls to you, but you should go home."
             ),
             {
-              "The sea": [ "wading_out", "(set: mood | desolate)" ],
-              "go home": [ "back_home", "(set: mood | warm)" ]
+              "The sea": [ "wading_out", "(set: mood : desolate)" ],
+              "go home": [ "back_home", "(set: mood : warm)" ]
             }
           ),
         "wading_out":
@@ -273,8 +300,8 @@ class Story:
           "name": "at_the_beach",
           "content": "You walk along the beach, watching seabirds dance with the waves. The sea calls to you, but you should go home.",
           "successors": {
-            "The sea": [ "wading_out", "(set: mood | desolate)" ],
-            "go home": [ "back_home", "(set: mood | warm)" ]
+            "The sea": [ "wading_out", "(set: mood : desolate)" ],
+            "go home": [ "back_home", "(set: mood : warm)" ]
           }
         },
         "wading_out": {

@@ -53,11 +53,13 @@ Built-in Macros
 The following built-in macros can be used. Note that if a story node shares the
 name of a built-in macro, the story node will be used instead.
 
-  (eval\: expression)
-    Takes a single expression as context and results in the result of
-    evaluating that expression.
+  (eval\: expr : expr : ...)
+    Takes a one or more expressions as context and results in the result of
+    evaluating those expressions. If one expression is given, its result is
+    returned, otherwise a list is returned containing the results of evaluating
+    each expression given.
 
-  (cat\: expr : expr : ...)
+  (text\: expr : expr : ...)
     Takes multiple expressions, evaluates each, and concatenates them all into
     one big result text. Useful with the '!' [[operator|expressions]].
 
@@ -252,7 +254,7 @@ Legal operators in expressions are:
       ```>
       [ 1, 2, 3 ] ! (times: 2 : ?) == [ 2, 4, 6 ]
       ```>
-      [ "Ariel", "Ibrahim", "Sapna" ] ! (cat: "Hello " : ?) ==
+      [ "Ariel", "Ibrahim", "Sapna" ] ! (text: "Hello " : ?) ==
       [ "Hello Ariel", "Hello Ibrahim", "Hello Sapna" ]
       ```>
       { "a": 1, "b": 2, "c": 3 } ! (eval: ? + 2) ==

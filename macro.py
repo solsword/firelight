@@ -164,6 +164,28 @@ class ParseError(Exception):
   """
   pass
 
+class ParseUnit:
+  """
+  A class representing a parsed unit of code (e.g., a constant, an operator, a
+  variable lookup, etc.)
+  """
+  pass
+
+
+class VariableLookup(ParseUnit):
+  """
+  A value representing looking up a variable in the story state.
+  """
+  def __init__(self, name):
+    self.name = name
+
+class FunctionCall(ParseUnit):
+  """
+  A value representing a macro invocation.
+  """
+  def __init__(self, name, args):
+    self.value = value
+
 def parse_next_val(units):
   """
   Parses the next value from the given units. Returns a (parse-tree, leftovers)
@@ -172,13 +194,13 @@ def parse_next_val(units):
   ut, uv = units[0]
   if ut == "word":
     if uv == "True":
-      return ("boolean", True), units[1:]
+      return True, units[1:]
     elif uv == "False":
-      return ("boolean", False), units[1:]
+      return False, units[1:]
     elif uv == "None":
-      return ("none", None), units[1:]
+      return None, units[1:]
     else:
-      return ("variable_lookup", uv), units[1:]
+      return VariableLookup(uv), units[1:]
   elif ut == "group":
     subunits = []
     level = 0
@@ -204,11 +226,17 @@ def parse_next_val(units):
   elif ut == "index":
     raise ParseError("Unexpected index (expected value).")
   elif ut == "call":
-    return ("eval_macro", uv)
+    ms = MACRO_START.match(uv)
+    if not ms:
+      raise ParseError("Invalid macro token.")
+    macro_name = ms.group(1)
+    macro_content = uv[ms.end():]
+    macro_args = utils.split_unquoted(macro_content, delim=':', qc='"')
+    return FunctionCall(macro_name, macro_args), units[1:]
   elif ut == "op":
     raise ParseError("Unexpected operator (expected value).")
   elif ut in ("int", "float", "string"):
-    return (ut, uv), units[1:]
+    return uv, units[1:]
 
 def parse_next_op(units):
   """
@@ -222,13 +250,13 @@ def parse_next_op(units):
     raise ParseError("Unexpected group (expected operator).")
   elif ut == "index":
     if uv == "open":
-      return ("index", "["), 
+      return ops.Operator('['), units[1:]
     else:
       raise ParseError("Unexpected index end (expected operator).")
   elif ut == "call":
     raise ParseError("Unexpected call (expected operator).")
   elif ut == "op":
-    return ("op", uv), units[1:]
+    return ops.Operator(uv), units[1:]
   elif ut in ("int", "float", "string"):
     raise ParseError("Unexpected constant (expected operator).")
 
@@ -365,13 +393,13 @@ def parse_units(units, ungrouped=False):
           result["state"] = "complete"
         # else state stays as need_val
       except ParseError as e:
-        (otyp, op), rest = parse_next_op(rest)
-        if op in ['+', '-', '~', 'not']: # stacked unary
+        op, rest = parse_next_op(rest)
+        if op.op in ['+', '-', '~', 'not']: # stacked unary
           nr = {
             "parent": result,
             "state": "need_val",
             "grouped": False,
-            "op": op,
+            "op": op.op,
             "arity": 1,
             "args": []
           }
@@ -389,11 +417,11 @@ def parse_units(units, ungrouped=False):
         else:
           raise e
     elif result["state"] == "need_op":
-      (otyp, op), rest = parse_next_op(rest)
-      if op == 'not': # unary operator
+      op, rest = parse_next_op(rest)
+      if op.op == 'not': # unary operator
         raise ParseError("Expected binary operator but got '{}'.".format(op))
-      elif otyp == "index": # recurse to get index parse tree
-        rr = rotate_operators(result, '[')
+      elif op.op == '[': # recurse to get index parse tree
+        rr = rotate_operators(result, op.op)
         if rr:
           result = rr
         # else no change
@@ -408,30 +436,30 @@ def parse_units(units, ungrouped=False):
         if level >= 0:
           raise ParseError("Unmatched '['.")
         result["arity"] = 2
-        result["op"] = '['
+        result["op"] = op.op
         result["state"] = "complete"
         result["args"].append(parse_units(rest[1:i]))
         rest = rest[i+1:]
       else: # a binary (or possibly trinary) operator
-        rr = rotate_operators(result, op)
+        rr = rotate_operators(result, op.op)
         if rr:
           result = rr
         else:
           result["arity"] = 2
-          result["op"] = op
+          result["op"] = op.op
           result["state"] = "need_val"
 
         # Fix arity/state for special operators:
-        if op in ('~', '~~', '.'):
+        if op.op in ('~', '~~', '.'):
           result["arity"] = 3
-        elif op == '|':
+        elif op.op == '|':
           result["arity"] = 3
           result["state"] = "need_opval"
-        elif op == '!':
+        elif op.op == '!':
           result["state"] = "need_call"
 
     elif result["state"] == "need_opval":
-      (otyp, op), rest = parse_next_op(rest)
+      op, rest = parse_next_op(rest)
       result["args"].append(
         {
           "parent": result,
@@ -442,14 +470,14 @@ def parse_units(units, ungrouped=False):
       )
       result["state"] = "need_val"
     elif result["state"] == "need_call":
-      (vtyp, val), rest = parse_next_val(rest)
-      if vtyp == "call":
+      val, rest = parse_next_val(rest)
+      if isinstance(val, FunctionCall):
         result["args"].append(
           {
             "parent": result,
             "state": "complete",
             "op": "value",
-            "value": (vtyp, val)
+            "value": val
           }
         )
         if len(result["args"]) == result["arity"]:
@@ -496,12 +524,20 @@ def parse_expr(expr):
 
   Examples:
     ```?
+    parse_expr("'yes'")
+    ```=
+    {
+      "state": "complete",
+      "op": "value",
+      "value": "yes"
+    }
+    ```?
     parse_expr("True")
     ```=
     {
       "state": "complete",
       "op": "value",
-      "value": ("boolean", True)
+      "value": True
     }
     ```?
     parse_expr("1 + 2")
@@ -515,12 +551,12 @@ def parse_expr(expr):
         {
           "state": "complete",
           "op": "value",
-          "value": ("int", 1)
+          "value": 1
         },
         {
           "state": "complete",
           "op": "value",
-          "value": ("int", 2)
+          "value": 2
         }
       ]
     }
@@ -536,12 +572,12 @@ def parse_expr(expr):
         {
           "state": "complete",
           "op": "value",
-          "value": ("string", 'one')
+          "value": 'one'
         },
         {
           "state": "complete",
           "op": "value",
-          "value": ("boolean", False)
+          "value": False
         }
       ]
     }
@@ -563,19 +599,19 @@ def parse_expr(expr):
             {
               "state": "complete",
               "op": "value",
-              "value": ("int", 1)
+              "value": 1
             },
             {
               "state": "complete",
               "op": "value",
-              "value": ("int", 2)
+              "value": 2
             }
           ]
         },
         {
           "state": "complete",
           "op": "value",
-          "value": ("int", 3)
+          "value": 3
         }
       ]
     }
@@ -591,7 +627,7 @@ def parse_expr(expr):
         {
           "state": "complete",
           "op": "value",
-          "value": ("int", 1)
+          "value": 1
         },
         {
           "state": "complete",
@@ -602,12 +638,12 @@ def parse_expr(expr):
             {
               "state": "complete",
               "op": "value",
-              "value": ("int", 2)
+              "value": 2
             },
             {
               "state": "complete",
               "op": "value",
-              "value": ("int", 3)
+              "value": 3
             }
           ]
         }
@@ -624,72 +660,81 @@ class EvalError(Exception):
   """
   pass
 
-def eval_tree(tree, state):
+def eval_tree(tree, story, state):
   """
   Evaluates a parse tree and returns an actual value. Use parse_expr to create
   a parse tree. Returns a ((type, value), update_state) complex.
   """
   # Handle the base cases:
   if tree["op"] in ("value", "opval"):
-    return tree["value"], state
+    rv = tree["value"]
+    if isinstance(rv, FunctionCall):
+      return eval_macro(rv.name, rv.args, story, state)
+    elif isinstance(rv, VariableLookup):
+      if rv.name in state:
+        return state[rv.name], state
+      else:
+        return error("Unknown variable '{}'.".format(rv.name), state)
+    else:
+      return rv, state
 
   # Short-circuiting and other special-case operators:
   if tree["op"] == 'or':
-    (t, v), state = eval_tree(tree["args"][0], state)
-    if ops.is_true(t, v):
+    val, state = eval_tree(tree["args"][0], story, state)
+    if ops.is_true(val):
       return ("boolean", True), state
     else:
-      (t, v), state = eval_tree(tree["args"][1], state)
-      return ("boolean", ops.is_true(t, v)), state
+      val, state = eval_tree(tree["args"][1], story, state)
+      return ("boolean", ops.is_true(val)), state
   elif tree["op"] == 'and':
-    (t, v), state = eval_tree(tree["args"][0], state)
-    if not ops.is_true(t, v):
+    val, state = eval_tree(tree["args"][0], story, state)
+    if not ops.is_true(val):
       return ("boolean", False), state
     else:
-      (t, v), state = eval_tree(tree["args"][1], state)
-      return ("boolean", ops.is_true(t, v)), state
+      val, state = eval_tree(tree["args"][1], story, state)
+      return ("boolean", ops.is_true(val)), state
   elif tree["op"] == '!':
-    (t, v), state = eval_tree(tree["args"][0], state)
-    if t == "list":
+    val, state = eval_tree(tree["args"][0], story, state)
+    if isinstance(val, list):
       mstate = {}
       mstate.update(state)
       mstate['@'] = v
       results = []
-      for i, val in enumerate(v):
+      for i, v in enumerate(val):
         mstate['#'] = ("int", i)
-        mstate['?'] = val
-        (rt, rv), mstate = eval_tree(tree["args"][1], mstate)
-        results.append((rt, rv))
+        mstate['?'] = v
+        rv, mstate = eval_tree(tree["args"][1], story, mstate)
+        results.append(rv)
 
       del mstate['#']
       del mstate['?']
       del mstate['@']
       state.update(mstate)
-      return ("list", results), state
-    elif t == "dict":
+      return results, state
+    elif isinstance(val, dict):
       mstate = {}
       mstate.update(state)
-      mstate['@'] = v
+      mstate['@'] = val
       results = {}
-      for k in v:
+      for k in val:
         mstate['#'] = k
-        mstate['?'] = v[k]
-        (rt, rv), mstate = eval_tree(tree["args"][1], mstate)
-        results[k] = (rt, rv)
+        mstate['?'] = val[k]
+        rv, mstate = eval_tree(tree["args"][1], story, mstate)
+        results[k] = rv
 
       del mstate['#']
       del mstate['?']
       del mstate['@']
       state.update(mstate)
-      return ("dict", results), state
+      return results, state
     else:
-      raise EvalError("Cannot map over value: {}".format((t, v)))
+      raise EvalError("Cannot map over value: {}".format(val))
 
   # Get the recursion out of the way:
   arg_values = []
   for a in tree["args"]:
-    (at, av), state = eval_tree(a, state)
-    arg_values.append((at, av))
+    av, state = eval_tree(a, story, state)
+    arg_values.append(av)
 
   # Operator implementations:
   return ops.op_result(tree["op"], state, *arg_values)
@@ -712,14 +757,14 @@ def eval_expr(expr, story, state):
       {}
     )
     ```=
-    (('int', 1), {})
+    (1, {})
     ```
   """
   state = copy.deepcopy(state)
 
   pt = parse_expr(expr)
 
-  return eval_tree(pt, state)
+  return eval_tree(pt, story, state)
 
 def eval_macro(name, args, story, state):
   """
@@ -740,10 +785,20 @@ def eval_macro(name, args, story, state):
       {}
     )
     ```=
-    (
-      "1",
-      {"_context": []}
+    ( 1, {} )
+    ```?
+    eval_macro(
+      "if",
+      ["1 - 1", "'nope'", "2 * 0", 'nope', "'a' or False", "'yes'", "else","0"],
+      eval( # Fake object with .nodes and .title (without importing story):
+        "[exec('class T: pass\\\\nt = T()\\\\nt.nodes = []"
+      + "\\\\nt.title=\\\"_\\\"'), "
+      + "eval('t')][1]"
+      ),
+      {}
     )
+    ```=
+    ( "yes", {} )
     ```
   """
   state = copy.deepcopy(state)
@@ -915,8 +970,8 @@ def pt_string(parse_tree, indent=0):
 @mb
 def eval_(story, state, *args):
   """
-  The 'eval' macro builtin. Evaluates each argument, returning a single value
-  or a list of values if there is more than one argument.
+  The 'eval' macro builtin. Evaluates each argument as an expression, returning
+  a single value or a list of values if there is more than one argument.
   """
   if len(args) == 1:
     return eval_expr(arg, story, state)
@@ -925,19 +980,22 @@ def eval_(story, state, *args):
     for arg in args:
       val, state = eval_expr(arg, story, state)
       result.append(val)
-    return result, state
+    return ("list", result), state
 
 @mb
-def cat(story, state, *args):
+def text(story, state, *args):
   """
-  The 'cat' macro builtin. Evaluates each argument as text, and returns the
-  results concatenated into a list.
+  The 'text' macro builtin. Evaluates each argument as text, joining them
+  together into a single result string.
   """
-  results = []
-  for arg in args:
-    val, state = eval_text(arg, story, state)
-    results.append(val)
-  return ''.join(str(r) for r in results)
+  if len(args) == 1:
+    return eval_text(arg, story, state)
+  else:
+    results = []
+    for arg in args:
+      val, state = eval_text(arg, story, state)
+      results.append(val)
+    return ("string", ''.join(results)), state
 
 # TODO: Catch exceptions generated w/ # of arguments
 @mb
@@ -973,9 +1031,23 @@ def context(story, state, n):
 def if_(story, state, *args):
   """
   The 'if' macro builtin. Evaluates every odd argument as a condition, also
-  accepting the special value 'else', and resolves to the evaluation (as text)
-  of the first even argument whose condition matched. Unmatched even arguments
-  are not evaluated.
+  accepting the special value 'else', and resolves to the evaluation (as an
+  expression) of the first even argument whose condition matched. Unmatched
+  even arguments are not evaluated.
+  """
+  return cond_base(story, state, *args, as_text=False)
+
+@mb
+def select(story, state, *args):
+  """
+  The 'select' macro builtin. Works exactly the same as 'if', but evaluates its
+  result as text instead of as an expression.
+  """
+  return cond_base(story, state, *args, as_text=True)
+
+def cond_base(story, state, *args, as_text=False):
+  """
+  Base code for 'if' and 'select'.
   """
   odd = [args[i] for i in range(0, len(args), 2)]
   even = [args[i] for i in range(1, len(args), 2)]
@@ -988,13 +1060,19 @@ def if_(story, state, *args):
   for i, arg in enumerate(odd):
     val, state = eval_expr(arg, story, state)
     if val: # the string "else" will pass this test
-      return eval_text(even[i], story, state)
+      if as_text:
+        return eval_text(even[i], story, state)
+      else:
+        return eval_expr(even[i], story, state)
 
   # No condition was true:
   if el is None:
     return None, state
   else:
-    return eval_expr(el, story, state)
+    if as_text:
+      return eval_text(el, story, state)
+    else:
+      return eval_expr(el, story, state)
 
 @mb
 def once(story, state, arg):
