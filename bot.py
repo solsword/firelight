@@ -123,7 +123,7 @@ def handle_general_command(core, tweet, sender):
     core.tweet_long(
       [
         "Okay, here are all the stories that I know:",
-        '"' + '"\n"'.join(t.title() for t in core.db.story_list()) + '"'
+        '\n'.join('"{}" by {}'.format(*t) for t in core.db.story_list())
       ],
       tweet.id,
       tweet.user.screen_name
