@@ -18,6 +18,7 @@ from state import StateChange, SetValue, IncrementValue, InvertValue
 
 from parse import reflow, remove_comments
 from parse import parse_story, render_story, parse_first_node, render_node
+import parse
 
 import macro
 
@@ -279,6 +280,7 @@ for f in [
   macro.parse_expr,
   macro.eval_expr,
   macro.eval_macro,
+  parse.parse_metadata,
 ]:
   mktest_docstring(f)
 

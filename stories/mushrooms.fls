@@ -21,8 +21,8 @@
 %    "": ""
 %  },
 %  "inv-desc": {
-%    "spade": "Your trusty spade."
-%    "bears-head-tooth": "A shaggy mass of branching white tendrils with brownish tips."
+%    "spade": "Your trusty spade.",
+%    "bears-head-tooth": "A shaggy mass of branching white tendrils with brownish tips.",
 %    "smoky-polypore": "Several leathery strips of fungus ripped from their base, white on top and dark gray on the bottom.",
 %    "turkey-tail": "Several pretty striped brown frills with white edges, still clinging to a few pieces of dead bark.",
 %    "diamond-polypore": "A few creamy-yellow trumpet-shaped mushrooms with delicate white honeycomb-lattice frills beneath.",
@@ -31,7 +31,7 @@
 %  "inv-cat": {
 %    "spade": "tool",
 %    "bears-head-tooth": "mushroom",
-%    "smoky-polypore": "mushroom",
+%    "smoky-polypore": "mushroom"
 %  },
 %  "inv": [
 %    { "id": "spade", "#": 1 }

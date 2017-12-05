@@ -30,6 +30,8 @@ def dedent(string, ts=4):
   common = None
   for l in lines:
     here = 0
+    if not l.strip(): # ignore blank lines
+      continue
     for c in l:
       if c not in " \t":
         break
@@ -38,7 +40,7 @@ def dedent(string, ts=4):
       elif c == "\t":
         here += ts
 
-    if here > 0 and (common == None or here < common):
+    if common == None or here < common:
       common = here
 
   if not common:
@@ -46,21 +48,24 @@ def dedent(string, ts=4):
 
   result = None
   for l in lines:
-    removed = 0
-    rest = l
-    while removed < common and rest:
-      c, rest = rest[0], rest[1:]
-      if c == " ":
-        removed += 1
-      elif c == "\t":
-        removed += ts
-      else:
-        raise RuntimeWarning(
-          "Lost count while removing indentation from:\n'''\n{}\n'''".format(
-            string.replace(' ', '␣').replace('\t', '␉').replace('\r', '␍')
+    if not l.strip():
+      rest = ""
+    else:
+      removed = 0
+      rest = l
+      while removed < common and rest:
+        c, rest = rest[0], rest[1:]
+        if c == " ":
+          removed += 1
+        elif c == "\t":
+          removed += ts
+        else:
+          raise RuntimeWarning(
+            "Lost count while removing indentation from:\n'''\n{}\n'''".format(
+              string.replace(' ', '␣').replace('\t', '␉').replace('\r', '␍')
+            )
           )
-        )
-        break
+          break
 
     if result == None:
       result = rest

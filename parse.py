@@ -54,19 +54,7 @@ def parse_metadata(src):
   Parses the initial metadata block of an .fls file, returning a pair
   containing a dictionary of metadata and a metadata-free source text. The
   metadata block must appear at the top of the file, and each line must start
-  with a percent sign. Example:
-
-    % title: The Title
-    % author: The Author
-    % start: start_node_name
-    % note: Note text.
-    %  Multiple lines may be indented.
-    % other_key: some made-up value
-    % state: {
-    %   "this is": "the starting story state",
-    %   "it must be in": "JSON format",
-    %   "the '%' at the beginning of each line": "will be removed"
-    % }
+  with a percent sign.
 
   All fields will be parsed as string keys/values, stripping whitespace from
   both ends. The exception is the 'state' field, whose value will be passed
@@ -84,12 +72,131 @@ def parse_metadata(src):
   value.
 
   Macro expansion does not occur within metadata fields.
+  
+  Examples:
+
+    ```?
+      parse_metadata('''
+      % title: The Title
+      % author: The Author
+      % start: start_node_name
+      % note: Note text.
+      %  Multiple lines may be indented.
+      % other_key: some made-up value
+      % state: {
+      %   "this is": "the starting story state",
+      %   "it must be in": "JSON format",
+      %   "the '%' at the beginning of each line": "will be removed"
+      % }
+      ''')
+    ```=
+    (
+      {
+        'title': 'The Title',
+        'author': 'The Author',
+        'start': 'start_node_name',
+        'note': 'Note text. Multiple lines may be indented.',
+        'other_key': 'some made-up value',
+        'state': {
+          'this is': 'the starting story state',
+          'it must be in': 'JSON format',
+          "the '%' at the beginning of each line": 'will be removed'
+        },
+        'modules': []
+      },
+      ''
+    )
+    ```?
+parse_metadata(
+  remove_comments('''
+% title: Mushrooms in Autumn
+% author: Peter Mawhorter
+% start: trail
+% modules: [ "inv" ]
+% note: Mushroom placement and appearances based on the "Field Guide to Common
+%   Macrofungi in Eastern Forests and their Ecosystem Functions" by Ostry,
+%   Anderson, and O'Brien of the United States Department of Agriculture Forest
+%   Service (General Technical Report NRS-79) General disclaimer: This is a
+%   work of fiction and is not intended to aid in identifying edible mushrooms.
+%   NEVER eat a mushroom unless you are absolutely certain it is not poisonous,
+%   as many edible species look very similar to poisonous ones, and as a result
+%   fatal poisonings occur worldwide every year.
+% state: {
+%  "lost": 0,
+%  "worry": 0, `` TODO: Use this value!
+%  "properties": {
+%    "smoky-polypore": "inedible",
+%    "bears-head-tooth": "choice",
+%    "turkey-tail": "inedible",
+%    "diamond-polypore": "too-old",
+%    "": ""
+%  },
+%  "inv-desc": {
+%    "spade": "Your trusty spade.",
+%    "bears-head-tooth": "A shaggy mass of branching white tendrils with brownish tips.",
+%    "smoky-polypore": "Several leathery strips of fungus ripped from their base, white on top and dark gray on the bottom.",
+%    "turkey-tail": "Several pretty striped brown frills with white edges, still clinging to a few pieces of dead bark.",
+%    "diamond-polypore": "A few creamy-yellow trumpet-shaped mushrooms with delicate white honeycomb-lattice frills beneath.",
+%    "": ""
+%  },
+%  "inv-cat": {
+%    "spade": "tool",
+%    "bears-head-tooth": "mushroom",
+%    "smoky-polypore": "mushroom"
+%  },
+%  "inv": [
+%    { "id": "spade", "#": 1 }
+%  ]
+%}
+hello
+''')
+)
+    ```=
+    (
+      {
+        'title': 'Mushrooms in Autumn',
+        'author': 'Peter Mawhorter',
+        'start': 'trail',
+        'modules': [ "inv" ],
+        'note': 'Mushroom placement and appearances based on the "Field Guide to Common Macrofungi in Eastern Forests and their Ecosystem Functions" by Ostry, Anderson, and O\\'Brien of the United States Department of Agriculture Forest Service (General Technical Report NRS-79) General disclaimer: This is a work of fiction and is not intended to aid in identifying edible mushrooms. NEVER eat a mushroom unless you are absolutely certain it is not poisonous, as many edible species look very similar to poisonous ones, and as a result fatal poisonings occur worldwide every year.',
+        'state': {
+          "lost": 0,
+          "worry": 0,
+          "properties": {
+            "smoky-polypore": "inedible",
+            "bears-head-tooth": "choice",
+            "turkey-tail": "inedible",
+            "diamond-polypore": "too-old",
+            "": ""
+          },
+          "inv-desc": {
+            "spade": "Your trusty spade.",
+            "bears-head-tooth": "A shaggy mass of branching white tendrils with brownish tips.",
+            "smoky-polypore": "Several leathery strips of fungus ripped from their base, white on top and dark gray on the bottom.",
+            "turkey-tail": "Several pretty striped brown frills with white edges, still clinging to a few pieces of dead bark.",
+            "diamond-polypore": "A few creamy-yellow trumpet-shaped mushrooms with delicate white honeycomb-lattice frills beneath.",
+            "": ""
+          },
+          "inv-cat": {
+            "spade": "tool",
+            "bears-head-tooth": "mushroom",
+            "smoky-polypore": "mushroom"
+          },
+          "inv": [
+            { "id": "spade", "#": 1 }
+          ]
+        }
+      },
+      'hello\\n'
+    )
+    ```
   """
   # Default values:
   metadata = {
     "title": "Untitled",
     "author": "Unknown",
     "start": "Error: you must specify a starting story node.",
+    "modules": "[]",
     "state": "{}"
   }
   leftovers = ""
@@ -111,6 +218,7 @@ def parse_metadata(src):
       break
 
   metadata["state"] = json.loads(metadata["state"])
+  metadata["modules"] = json.loads(metadata["modules"])
   return metadata, '\n'.join(lines[i:])
 
 def parse_first_node(src):
