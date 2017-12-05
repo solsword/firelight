@@ -187,14 +187,24 @@ class Story:
   A Story is just a constellation of StoryNodes with an author, a title, and
   some default initial state.
   """
-  def __init__(self, title, author, start, nodes, setup=None):
-    # TODO: Add modules HERE
+  def __init__(
+    self,
+    title,
+    author,
+    start,
+    nodes,
+    modules=None,
+    setup=None,
+    module_finder=None
+  ):
     self.title = title
     self.author = author
     self.start = start
     self.nodes = nodes
+    self.modules = modules or []
     self.setup = setup or {}
     self.current_node_text = ""
+    self.module_finder = module_finder
     if self.start not in self.nodes:
       raise ValueError(
         "Start node '{}' not found among story nodes.".format(self.start)
@@ -298,6 +308,8 @@ class Story:
       "start": self.start,
       "nodes": pack(self.nodes)
     }
+    if self.modules:
+      result["modules"] = self.modules
     if self.setup:
       result["setup"] = self.setup
 
@@ -305,7 +317,8 @@ class Story:
 
   def _unpack_(obj):
     """
-    Creates a StoryNode from a simple object (see packable.py).
+    Creates a StoryNode from a simple object (see packable.py). Note that the
+    unpacked story node will not have a module finder.
     """
     return Story(
       obj["title"],
@@ -315,8 +328,15 @@ class Story:
         k: unpack(obj["nodes"][k], StoryNode)
           for k in obj["nodes"]
       },
+      modules=obj["modules"] if "modules" in obj else None,
       setup=obj["setup"] if "setup" in obj else None
     )
+
+  def set_module_finder(self, finder):
+    """
+    Sets the module finder.
+    """
+    self.module_finder = finder
 
   def get(self, node_name):
     """
@@ -479,11 +499,18 @@ class Story:
     content. Returns a (display_text, updated_state) pair. The 'context'
     argument is passed as the _context variable during node evaluation, while
     the 'highlight' variable controls how options within the text are
-    highlighted (see highlight_content below).
+    highlighted (see highlight_content below) and the 'module_finder' argument
+    is passed into eval_text.
     """
     if isinstance(node, str):
       node = self.get(node)
-    text, new_state = macro.eval_text(node.content, self, state, context)
+      text, new_state = macro.eval_text(
+        node.content,
+        self,
+        state,
+        context,
+        self.module_finder
+      )
     return (
       highlight_content(text, node.successors, highlight=highlight),
       new_state
@@ -492,7 +519,13 @@ class Story:
   def display_transition(self, node, option, state):
     """
     Computes transition text for taking the given option at the given node.
+    Similar to display_node (see above).
     """
     transition_text = node.successors[option][1]
-    result, new_state = macro.eval_text(transition_text, self, state)
+    result, new_state = macro.eval_text(
+      transition_text,
+      self,
+      state,
+      self.module_finder
+    )
     return result.strip(), new_state

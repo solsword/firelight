@@ -660,7 +660,7 @@ class EvalError(Exception):
   """
   pass
 
-def eval_tree(tree, story, state):
+def eval_tree(tree, story, state, module_finder):
   """
   Evaluates a parse tree and returns an actual value. Use parse_expr to create
   a parse tree. Returns a ((type, value), update_state) complex.
@@ -669,7 +669,7 @@ def eval_tree(tree, story, state):
   if tree["op"] in ("value", "opval"):
     rv = tree["value"]
     if isinstance(rv, FunctionCall):
-      return eval_macro(rv.name, rv.args, story, state)
+      return eval_macro(rv.name, rv.args, story, state, module_finder)
     elif isinstance(rv, VariableLookup):
       if rv.name in state:
         return state[rv.name], state
@@ -680,21 +680,21 @@ def eval_tree(tree, story, state):
 
   # Short-circuiting and other special-case operators:
   if tree["op"] == 'or':
-    val, state = eval_tree(tree["args"][0], story, state)
+    val, state = eval_tree(tree["args"][0], story, state, module_finder)
     if ops.is_true(val):
       return ("boolean", True), state
     else:
-      val, state = eval_tree(tree["args"][1], story, state)
+      val, state = eval_tree(tree["args"][1], story, state, module_finder)
       return ("boolean", ops.is_true(val)), state
   elif tree["op"] == 'and':
-    val, state = eval_tree(tree["args"][0], story, state)
+    val, state = eval_tree(tree["args"][0], story, state, module_finder)
     if not ops.is_true(val):
       return ("boolean", False), state
     else:
-      val, state = eval_tree(tree["args"][1], story, state)
+      val, state = eval_tree(tree["args"][1], story, state, module_finder)
       return ("boolean", ops.is_true(val)), state
   elif tree["op"] == '!':
-    val, state = eval_tree(tree["args"][0], story, state)
+    val, state = eval_tree(tree["args"][0], story, state, module_finder)
     if isinstance(val, list):
       mstate = {}
       mstate.update(state)
@@ -703,7 +703,7 @@ def eval_tree(tree, story, state):
       for i, v in enumerate(val):
         mstate['#'] = ("int", i)
         mstate['?'] = v
-        rv, mstate = eval_tree(tree["args"][1], story, mstate)
+        rv, mstate = eval_tree(tree["args"][1], story, mstate, module_finder)
         results.append(rv)
 
       del mstate['#']
@@ -719,7 +719,7 @@ def eval_tree(tree, story, state):
       for k in val:
         mstate['#'] = k
         mstate['?'] = val[k]
-        rv, mstate = eval_tree(tree["args"][1], story, mstate)
+        rv, mstate = eval_tree(tree["args"][1], story, mstate, module_finder)
         results[k] = rv
 
       del mstate['#']
@@ -733,14 +733,14 @@ def eval_tree(tree, story, state):
   # Get the recursion out of the way:
   arg_values = []
   for a in tree["args"]:
-    av, state = eval_tree(a, story, state)
+    av, state = eval_tree(a, story, state, module_finder)
     arg_values.append(av)
 
   # Operator implementations:
   return ops.op_result(tree["op"], state, *arg_values)
 
 
-def eval_expr(expr, story, state):
+def eval_expr(expr, story, state, module_finder=None):
   """
   Evaluates an expression, which may include both macro calls and operators.
   Returns a result-value, updated-state pair.
@@ -764,13 +764,16 @@ def eval_expr(expr, story, state):
 
   pt = parse_expr(expr)
 
-  return eval_tree(pt, story, state)
+  return eval_tree(pt, story, state, module_finder)
 
-def eval_macro(name, args, story, state):
+def eval_macro(name, args, story, state, module_finder=None):
   """
   Evaluates the macro with the given name in the context of the given story,
   feeding in the given arguments and using the given state. A return-value,
   updated-state pair is returned.
+
+  The given module_finder function should accept a module name and return a
+  Story object for that module, or None if the module can't be found.
 
   Examples:
     ```?
@@ -803,72 +806,86 @@ def eval_macro(name, args, story, state):
   """
   state = copy.deepcopy(state)
 
-  if name in story.nodes:
+  if name in story.nodes: # node-as-macro call
     node = story.nodes[name]
 
-    value, state = eval_text(node.content, story, state, args)
+    return eval_text(node.content, story, state, args, module_finder)
 
-  else:
-    # Must be built-in or from a module:
-    if name.count('.') == 1:
-      # From a module
-      module_name, inner_name = name.split('.')
+  # Must be built-in or from a module:
+  # Try to resolve as a module:
+  if name.count('.') == 1: # From a module
+    module_name, inner_name = name.split('.')
 
-      if module_name in story.modules:
-        module = story.modules[module_name]
+    if module_name not in story.modules:
+      return error(
+        "Module '{}' for macro '{}' is not included by story '{}'.".format(
+          module_name,
+          name,
+          story.title
+        ),
+        state
+      )
 
-        if inner_name in module.nodes:
-          node = module.nodes[inner_name]
-          # TODO: Some way to return a non-string here?
-          value, state = eval_text(node.content, story, state, args)
+    if not module_finder:
+      return error(
+        "Attempt to use module '{}' without a module finder.".format(
+          module_name
+        ),
+        state
+      )
 
-        else:
-          value, state = error(
-            "Module '{}' doesn't define macro '{}'.".format(
-              module_name,
-              inner_name
-            ),
-            state
-          )
+    module = module_finder(module_name)
 
-      else:
-        value, state = error(
-          "Module '{}' for macro '{}' was not loaded by story '{}'.".format(
-            module_name,
-            name,
-            story.title
-          ),
-          state
-        )
+    if not module:
+      return error("Module '{}' not found.".format(module_name), state)
 
-    elif name in BUILTINS:
-      # A built-in macro
-      try:
-        value, state = BUILTINS[name](story, state, *args)
-      except Exception as e:
-        value, state = error(
-          "Error calling built-in '{}' with arguments:\n{}\nDetails:\n{}"
-          .format(
-            name,
-            '\n'.join(str(a) for a in args),
-            ''.join(
-              traceback.format_exception(
-                type(e),
-                e,
-                e.__traceback__
-              )
+    if inner_name not in module.nodes:
+      return error(
+        "Module '{}' doesn't define macro '{}'.".format(
+          module_name,
+          inner_name
+        ),
+        state
+      )
+
+    node = module.nodes[inner_name]
+    # TODO: Some way to return a non-string here?
+    return eval_text(
+      node.content,
+      story,
+      state,
+      args,
+      module_finder
+    )
+
+  # if it's not a module reference, it might be a builtin?
+  elif name in BUILTINS: # A built-in macro
+    try:
+      return BUILTINS[name](module_finder, story, state, *args)
+    except Exception as e:
+      return error(
+        "Error calling built-in '{}' with arguments:\n{}\nDetails:\n{}"
+        .format(
+          name,
+          '\n'.join(str(a) for a in args),
+          ''.join(
+            traceback.format_exception(
+              type(e),
+              e,
+              e.__traceback__
             )
-          ),
-          state
-        )
-    else:
-      # Unrecognized macro: expands to error text
-      # TODO: Better error text
-      value, state = error("Unrecognized macro '{}'.".format(name), state)
+          )
+        ),
+        state
+      )
 
-  return value, state
+  # otherwise we don't know what this macro is...
+  else:
+    # Unrecognized macro: expands to error text
+    # TODO: Better error text
+    return error("Unrecognized macro '{}'.".format(name), state)
 
-def eval_text(text, story, state, context=None):
+def eval_text(text, story, state, context=None, module_finder=None):
   """
   Evaluates a string which may contain macros. Treats everything that's not
   explicitly a macro as text. Returns a pair of computed-value, modified-state,
@@ -876,6 +893,9 @@ def eval_text(text, story, state, context=None):
   be affected.
 
   Context may be specified as a list of values.
+
+  The given module_finder function should accept a module name and return a
+  Story object for that module, or None if the module can't be found.
   """
   context = context or []
 
@@ -931,7 +951,7 @@ def eval_text(text, story, state, context=None):
       macro_content = text[ms.end():end]
       macro_args = utils.split_unquoted(macro_content, delim=':', qc='"')
 
-      mv, state = eval_macro(macro_name, macro_args, story, state)
+      mv, state = eval_macro(macro_name, macro_args, story, state,module_finder)
       bits.append(to_string(mv))
 
   # Restore locals:
@@ -968,44 +988,44 @@ def pt_string(parse_tree, indent=0):
 # -------------------------
 
 @mb
-def eval_(story, state, *args):
+def eval_(mf, story, state, *args):
   """
   The 'eval' macro builtin. Evaluates each argument as an expression, returning
   a single value or a list of values if there is more than one argument.
   """
   if len(args) == 1:
-    return eval_expr(arg, story, state)
+    return eval_expr(arg, story, state, mf)
   else:
     result = []
     for arg in args:
-      val, state = eval_expr(arg, story, state)
+      val, state = eval_expr(arg, story, state, mf)
       result.append(val)
     return ("list", result), state
 
 @mb
-def text(story, state, *args):
+def text(mf, story, state, *args):
   """
   The 'text' macro builtin. Evaluates each argument as text, joining them
   together into a single result string.
   """
   if len(args) == 1:
-    return eval_text(arg, story, state)
+    return eval_text(arg, story, state, mf)
   else:
     results = []
     for arg in args:
-      val, state = eval_text(arg, story, state)
+      val, state = eval_text(arg, story, state, mf)
       results.append(val)
     return ("string", ''.join(results)), state
 
 # TODO: Catch exceptions generated w/ # of arguments
 @mb
-def lookup(story, state, obj, key):
+def lookup(mf, story, state, obj, key):
   """
   The 'lookup' macro builtin. Evaluates two arguments as expressions and looks
   up the second result within the first.
   """
-  obj, state = eval_expr(obj, story, state)
-  key, state = eval_expr(key, story, state)
+  obj, state = eval_expr(obj, story, state, mf)
+  key, state = eval_expr(key, story, state, mf)
   if key in obj:
     return obj[key], state
   else:
@@ -1015,12 +1035,12 @@ def lookup(story, state, obj, key):
     )
 
 @mb
-def context(story, state, n):
+def context(mf, story, state, n):
   """
   The 'context' macro builtin. Returns the value of the nth context variable,
   after evaluating the given expression to find n.
   """
-  n, state = eval_expr(n, story, state)
+  n, state = eval_expr(n, story, state, mf)
   if n >= 1 and n <= len(state["_context"]):
     return state["_context"][n-1], state
   else:
@@ -1028,24 +1048,24 @@ def context(story, state, n):
     return None, state
 
 @mb
-def if_(story, state, *args):
+def if_(mf, story, state, *args):
   """
   The 'if' macro builtin. Evaluates every odd argument as a condition, also
   accepting the special value 'else', and resolves to the evaluation (as an
   expression) of the first even argument whose condition matched. Unmatched
   even arguments are not evaluated.
   """
-  return cond_base(story, state, *args, as_text=False)
+  return cond_base(mf, story, state, *args, as_text=False)
 
 @mb
-def select(story, state, *args):
+def select(mf, story, state, *args):
   """
   The 'select' macro builtin. Works exactly the same as 'if', but evaluates its
   result as text instead of as an expression.
   """
-  return cond_base(story, state, *args, as_text=True)
+  return cond_base(mf, story, state, *args, as_text=True)
 
-def cond_base(story, state, *args, as_text=False):
+def cond_base(mf, story, state, *args, as_text=False):
   """
   Base code for 'if' and 'select'.
   """
@@ -1058,36 +1078,36 @@ def cond_base(story, state, *args, as_text=False):
     el = odd.pop()
 
   for i, arg in enumerate(odd):
-    val, state = eval_expr(arg, story, state)
+    val, state = eval_expr(arg, story, state, mf)
     if val: # the string "else" will pass this test
       if as_text:
-        return eval_text(even[i], story, state)
+        return eval_text(even[i], story, state, mf)
       else:
-        return eval_expr(even[i], story, state)
+        return eval_expr(even[i], story, state, mf)
 
   # No condition was true:
   if el is None:
     return None, state
   else:
     if as_text:
-      return eval_text(el, story, state)
+      return eval_text(el, story, state, mf)
     else:
-      return eval_expr(el, story, state)
+      return eval_expr(el, story, state, mf)
 
 @mb
-def once(story, state, arg):
+def once(mf, story, state, arg):
   """
   The 'once' macro builtin. Evaluates its argument as text, but only if this is
   the first time that the current node has been visited. Otherwise it returns
   an empty string.
   """
   if state["_first"]:
-    return eval_text(arg, story, state)
+    return eval_text(arg, story, state, mf)
   else:
     return "", state
 
 @mb
-def again(story, state, arg):
+def again(mf, story, state, arg):
   """
   The 'again' macro builtin. The converse of once: it evaluates its argument
   as text only on non-initial visits to a node.
@@ -1095,4 +1115,4 @@ def again(story, state, arg):
   if state["_first"]:
     return "", state
   else:
-    return eval_text(arg, story, state)
+    return eval_text(arg, story, state, mf)

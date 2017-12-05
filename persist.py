@@ -22,6 +22,8 @@ class Storage:
     self.connection = None
     self.connect()
     self.setup_tables()
+    self.story_cache = {}
+    self.module_cache = {}
 
   def connect(self):
     """
@@ -174,9 +176,10 @@ class Storage:
       else:
         print(
           (
-            "Warning: attempted to save new story by '{}' "
+            "Warning: attempted to save new {} by '{}' "
             "with duplicate title '{}'."
           ).format(
+            "module" if is_module else "story",
             author,
             title
           ),
@@ -213,8 +216,11 @@ class Storage:
     Looks up a story (or module) in the database and returns it, or None if no
     such story exists. If multiple stories match (when author is given as
     None), a list will be returned.
-    # TODO: THIS?!?
     """
+    cached = self.find_cached(title, author, is_module)
+    if cached:
+      return cached
+
     table = "modules" if is_module else "stories"
     cur = self.connection.cursor()
     if author is None:
@@ -231,10 +237,26 @@ class Storage:
     if len(rows) < 1:
       return None
 
-    if len(rows) > 1:
-      return [ unpack(json.loads(r["package"]), Story) for r in rows ]
+    if len(rows) > 1: # Don't cache anything in this case
+      result = [ unpack(json.loads(r["package"]), Story) for r in rows ]
+      result.set_module_finder(self.find_module)
     else:
-      return unpack(json.loads(rows[0]["package"]), Story)
+      result = unpack(json.loads(rows[0]["package"]), Story)
+      result.set_module_finder(self.find_module)
+
+      if is_module:
+        self.cache_module(result)
+      else:
+        self.cache_story(result)
+
+      return result
+
+  def find_module(self, module_name, module_author=None):
+    """
+    A module finder. Looks up modules by name in the modules database.
+    """
+    # TODO: Get module author info!
+    return self.recall_story(module_name, module_author, is_module=True)
 
   def story_list(self):
     """
@@ -331,3 +353,57 @@ FROM tellings WHERE tweet = ?;
         json.loads(row["state"]),
         row["is_head"]
       )
+
+  def find_cached(self, title, author=None, is_module=False):
+    """
+    Looks up a story or module in the cache. Returns None if the given item
+    isn't cached. Guesses when there are multiple matching items (only possible
+    when author is not given).
+    """
+    cache = self.module_cache if is_module else self.story_cache
+    if author:
+      k = title + "::" + author
+      return cache.get(k, None)
+    else:
+      possible = []
+      for sk in cache:
+        c_title, c_author = sk.split("::")
+        if title == c_title:
+          possible.append(sk)
+      if not possible:
+        return None
+      sk = sorted(possible)[0]
+      return cache[sk]
+
+  def cache_story(self, story, is_module=False):
+    """
+    Caches the given story (or module), booting out the oldest cached item if
+    there are too many cached.
+    """
+    cache = self.module_cache if is_module else self.story_cache
+    cache_limit = (
+      config.MODULE_CACHE_SIZE
+        if is_module
+        else config.STORY_CACHE_SIZE
+    )
+    k = story.title + "::" + story.author
+    if k in cache:
+      # already cached: replace and update age
+      cache[k] = (0, story)
+    else:
+      # not cached yet, first shrink cache if required:
+      if len(cache) >= config.MODULE_CACHE_SIZE:
+        oldest = None
+        for sk in cache:
+          age, st = cache[sk]
+          if oldest == None or age > oldest[1]:
+            oldest = (sk, age)
+
+        del cache[oldest[0]]
+
+      # now update cache ages
+      for sk in cache:
+        age, st = cache[sk]
+        cache[sk] = (age+1, st)
+      # now add to cache at age 0
+      cache[k] = (0, story)
