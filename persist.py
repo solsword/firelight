@@ -55,6 +55,7 @@ class Storage:
     cur.execute("DROP TABLE IF EXISTS state;")
     cur.execute("DROP TABLE IF EXISTS tellings;")
     cur.execute("DROP TABLE IF EXISTS stories;")
+    cur.execute("DROP TABLE IF EXISTS modules;")
     self.connection.commit()
 
     self.setup_tables()
@@ -110,6 +111,16 @@ class Storage:
       """
     )
 
+    cur.execute(
+      """
+      CREATE TABLE IF NOT EXISTS modules(
+        title TEXT NOT NULL,
+        author TEXT NOT NULL,
+        package TEXT NOT NULL
+      );
+      """
+    )
+
     self.connection.commit()
 
   def save_state(self, key, value):
@@ -142,17 +153,20 @@ class Storage:
     value = row[key]
     return value
 
-  def save_new_story(self, story, force=False):
+  def save_new_story(self, story, force=False, is_module=False):
     """
     Saves a new story to the database. Returns True if it succeeds, or False
     (and prints a warning message) if a story by that title already exists.
     Always returns true and replaces any existing story if 'force' is True.
+    Saves the story as a module if is_module is True.
     """
+    table = "modules" if is_module else "stories"
     cur = self.connection.cursor()
     title = story.title.lower()
     author = story.author.title()
     cur.execute(
-      "SELECT * FROM stories WHERE title = ? AND author = ?;", (title, author)
+      "SELECT * FROM {} WHERE title = ? AND author = ?;".format(table),
+      (title, author)
     )
     if len(cur.fetchall()) > 0:
       if force:
@@ -172,42 +186,45 @@ class Storage:
 
     # TODO: maximize packing efficiency
     cur.execute(
-      "INSERT INTO stories(title, author, package) values(?, ?, ?);",
+      "INSERT INTO {}(title, author, package) values(?, ?, ?);".format(table),
       ( title, author, json.dumps(pack(story)) )
     )
 
     self.connection.commit()
     return True
 
-  def update_story(self, story):
+  def update_story(self, story, is_module=False):
     """
-    Updates a story in the database, overwriting the current contents.
+    Updates a story (or module) in the database, overwriting the current
+    contents.
     """
+    table = "modules" if is_module else "stories"
     cur = self.connection.cursor()
     # TODO: maximize packing efficiency
     cur.execute(
-      "UPDATE stories SET package = ? WHERE title = ? AND author = ?;",
+      "UPDATE {} SET package = ? WHERE title = ? AND author = ?;".format(table),
       ( json.dumps(pack(story)), story.title.lower(), story.author.title() )
     )
     # TODO: Error handling here
     self.connection.commit()
 
-  def recall_story(self, title, author=None):
+  def recall_story(self, title, author=None, is_module=False):
     """
-    Looks up a story in the database and returns it, or None if no such story
-    exists. If multiple stories match (when author is given as None), a list
-    will be returned.
+    Looks up a story (or module) in the database and returns it, or None if no
+    such story exists. If multiple stories match (when author is given as
+    None), a list will be returned.
     # TODO: THIS?!?
     """
+    table = "modules" if is_module else "stories"
     cur = self.connection.cursor()
     if author is None:
       cur.execute(
-        "SELECT package FROM stories WHERE title = ?;",
+        "SELECT package FROM {} WHERE title = ?;".format(table),
         ( title.lower(), )
       )
     else:
       cur.execute(
-        "SELECT package FROM stories WHERE title = ? AND author = ?;",
+        "SELECT package FROM {} WHERE title = ? AND author = ?;".format(table),
         ( title.lower(), author.title() )
       )
     rows = cur.fetchall()
@@ -225,6 +242,14 @@ class Storage:
     """
     cur = self.connection.cursor()
     cur.execute("SELECT title, author FROM stories;")
+    return [ (row["title"], row["author"]) for row in cur.fetchall()]
+
+  def module_list(self):
+    """
+    Returns a list of all known module titles/authors (returned as pairs).
+    """
+    cur = self.connection.cursor()
+    cur.execute("SELECT title, author FROM modules;")
     return [ (row["title"], row["author"]) for row in cur.fetchall()]
 
   def begin_telling(self, tweet, reader, author, title):

@@ -19,7 +19,7 @@ import parse
 from packable import pack, unpack
 
 
-def load_story(core, filename, force=False, fmt="auto"):
+def load_story(core, filename, force=False, fmt="auto", is_module=False):
   """
   Loads a story into the database of the given core API object from the given
   file. Prints a warning and does nothing if the file cannot be loaded or if
@@ -27,7 +27,8 @@ def load_story(core, filename, force=False, fmt="auto"):
   'force' is True. The fmt argument decides which format to load, "json" for
   JSON format, and "story" for Markdown-like format, or "auto" to choose based
   on the start of the file (just checks whether the first two non-whitespace
-  characters are '{' and '"', in which case it uses JSON).
+  characters are '{' and '"', in which case it uses JSON). If is_module is
+  True, the story is loaded (and stored) as a module instead of as a story.
   """
   with open(filename, 'r') as fin:
     try:
@@ -46,53 +47,81 @@ def load_story(core, filename, force=False, fmt="auto"):
       if fmt == "json":
         st = unpack(json.loads(raw), story.Story)
       elif fmt == "story":
-        st = unpack(parse.untangle(raw), story.Story)
+        st = parse.parse_story(raw)
       else:
         raise ValueError("Invalid story format '{}'.".format(fmtstr))
     except Exception as e:
       print(
         "Warning: file '{}' could not be read as a Story in format '{}'."
-        .format(
-          os.path.join(dirpath, f),
-          fmtstr
-        )
+        .format(filename, fmtstr)
       )
       if config.DEBUG:
         print(e, file=sys.stderr)
         traceback.print_tb(e.__traceback__, file=sys.stderr)
       return
 
-    core.db.save_new_story(st, force=force)
+    core.db.save_new_story(st, force=force, is_module=is_module)
 
-def load_stories_from_directory(core, directory, force=False):
+def load_stories_from_directory(core, directory, force=False, as_modules=False):
   """
   Scans the given directory recursively for '.flj' and '.fls' files and calls
-  load_story on each, passing the 'force' parameter through.
+  load_story on each, passing the 'force' and 'as_modules" parameters through.
   """
   for dirpath, dirnames, filenames in os.walk(directory):
     for f in filenames:
       if f.endswith(".flj"):
-        load_story(core, os.path.join(dirpath, f), force=force)
+        load_story(
+          core,
+          os.path.join(dirpath, f),
+          force=force,
+          is_module=as_modules
+        )
       if f.endswith(".fls"):
-        load_story(core, os.path.join(dirpath, f), force=force)
+        load_story(
+          core,
+          os.path.join(dirpath, f),
+          force=force,
+          is_module=as_modules
+        )
 
-def main(targets=None, force=False):
+def main(targets=None, force=False, as_modules=False):
   """
-  The main loop of the bot.
+  Main script code for loading stories.
   """
   global PROCESSING_TOTAL
   tk = api.get_tokens()
   core = api.TwitterAPI(tk)
   if targets:
     for t in targets:
+      is_module = False
+      if (
+        as_modules
+     or (
+          t.startswith(config.MODULES_DIRECTORY)
+       or t.startswith("./" + config.MODULES_DIRECTORY)
+        )
+      ):
+        is_module = True
+
       if t.endswith(".flj"):
-        load_story(core, t, force=force, fmt="json")
+        load_story(core, t, force=force, fmt="json", is_module=is_module)
       elif t.endswith(".fls"):
-        load_story(core, t, force=force, fmt="story")
+        load_story(core, t, force=force, fmt="story", is_module=is_module)
       else:
-        load_story(core, t, force=force, fmt="auto")
+        load_story(core, t, force=force, fmt="auto", is_module=is_module)
   else:
-    load_stories_from_directory(core, config.STORIES_DIRECTORY, force=force)
+    load_stories_from_directory(
+      core,
+      config.STORIES_DIRECTORY,
+      force=force,
+      as_modules=False
+    )
+    load_stories_from_directory(
+      core,
+      config.MODULES_DIRECTORY,
+      force=force,
+      as_modules=True
+    )
 
 if __name__ == "__main__":
   if "-h" in sys.argv:
@@ -105,6 +134,7 @@ Options:
 
   -h: help (this message)
   -f: force (replace old stories w/ matching titles)
+  -m: as_modules (all targets are loaded as modules; no effect without targets)
 
 Function:           
 
@@ -114,6 +144,11 @@ Function:
   message if a loaded story has the same name as an existing story, and ignores
   that story. If '-f' is given, replaces old stories without any message
   instead.
+
+  Also loads modules from the config.MODULES_DIRECTORY if no targets are given.
+  If a target is given that's clearly within the config.MODULES_DIRECTORY (the
+  target path starts with that directory) then that target will be loaded as a
+  module instead of as a story.
 """
     )
     exit(0)
@@ -122,7 +157,10 @@ Function:
   while "-f" in sys.argv:
     sys.argv.remove("-f")
     force = True
+  while "-m" in sys.argv:
+    sys.argv.remove("-m")
+    as_modules = True
   if len(sys.argv) == 1:
     main(force=force)
   else:
-    main(sys.argv[1:], force=force)
+    main(sys.argv[1:], force=force, as_modules=as_modules)

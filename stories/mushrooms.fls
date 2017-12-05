@@ -1,6 +1,7 @@
 % title: Mushrooms in Autumn
 % author: Peter Mawhorter
 % start: trail
+% modules: [ "inv" ]
 % note: Mushroom placement and appearances based on the "Field Guide to Common
 %   Macrofungi in Eastern Forests and their Ecosystem Functions" by Ostry,
 %   Anderson, and O'Brien of the United States Department of Agriculture Forest
@@ -40,7 +41,7 @@
 # trail
 
 (once:
- Disclaimer: This is a work of fiction and is not intended to aid in
+ Disclaimer\: This is a work of fiction and is not intended to aid in
  identifying edible mushrooms. NEVER eat a mushroom unless you are absolutely
  certain it is not poisonous, as many edible species look very similar to
  poisonous ones, and as a result fatal poisonings occur worldwide every year.
