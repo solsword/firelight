@@ -21,6 +21,12 @@ def or_strlist(alternatives):
   else:
     return ", ".join(alternatives[:-1]) + ", or " + alternatives[-1]
 
+def show_spaces(string):
+  """
+  Returns a string with whitespace made visible. Newlines are preserved.
+  """
+  return string.replace(' ', '␣').replace('\t', '␉').replace('\r', '␍')
+
 def dedent(string, ts=4):
   """
   Removes common leading whitespace from the given string. Each tab counts as
@@ -62,7 +68,7 @@ def dedent(string, ts=4):
         else:
           raise RuntimeWarning(
             "Lost count while removing indentation from:\n'''\n{}\n'''".format(
-              string.replace(' ', '␣').replace('\t', '␉').replace('\r', '␍')
+              show_spaces(string)
             )
           )
           break

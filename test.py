@@ -7,8 +7,11 @@ Unit tests.
 
 import traceback
 import sys
+import io
 
 import utils
+
+import config
 
 from packable import pack, unpack
 from diffable import diff
@@ -21,6 +24,10 @@ from parse import parse_story, render_story, parse_first_node, render_node
 import parse
 
 import macro
+
+import fake_api
+import load_stories
+import bot
 
 all_tests = []
 def test(f):
@@ -283,6 +290,55 @@ for f in [
   parse.parse_metadata,
 ]:
   mktest_docstring(f)
+
+@test
+def test_bot_basics():
+  """
+  Tests the most basic bot functionality.
+  """
+  queue = [
+    fake_api.FakeTweet(
+      "tester",
+      0,
+      "@{} tell help #ignored".format(config.MY_HANDLE)
+    )
+  ]
+  output = io.StringIO()
+  expected = """\
+To: 0
+--------------------------------------------------------------------------------
+@tester @tester Firelight is an interactive story engine. Options appear in brackets. Help topics: [version] [links] 🐵🦊🐴🐃
+================================================================================
+"""
+  # create a fake API object
+  fcore = fake_api.FakeTwitterAPI(queue, output, "test/test.db")
+
+  # load test stories
+  load_stories.load_stories_from_directory(
+    fcore,
+    "test/stories"
+  )
+  load_stories.load_stories_from_directory(
+    fcore,
+    "test/modules",
+    as_modules=True
+  )
+
+  # run the bot through one processing loop
+  bot.run_bot(fcore, loop=False)
+  result = output.getvalue()
+  assert result == expected, (
+    (
+      "Bot output differs from expected output:\n```\n{}\n```\n{}\n```"
+      "\nDifferences:\n  {}"
+    ).format(
+      result,
+      expected,
+      "\n  ".join(diff(result, expected))
+    )
+  )
+
+  return True
 
 def main():
   for t in all_tests:

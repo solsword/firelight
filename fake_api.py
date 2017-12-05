@@ -1,54 +1,45 @@
 """
-api.py
+fake_api.py
 
-Core internal API for twitter access. Maps actions to tweepy calls.
+Fake API for testing. Accesses storage but doesn't connect to Twitter. 
 """
 
 import os
+import sys
 import json
 
-import tweepy
 import persist
 
 import config
 
-# See: https://developer.twitter.com/en/docs/tweets/filter-realtime/guides/streaming-message-types
-DISCONNECT_CODES = {
-  1: "Shutdown",
-  2: "Duplicate Stream",
-  3: "Control request",
-  4: "Stall",
-  5: "Normal",
-  6: "Token Revoked",
-  7: "Admin Logout",
-  8: "Reserved Internal",
-  9: "Max Message Limit",
-  10: "Stream Exception",
-  11: "Broker Stall",
-  12: "Shed load",
-}
-
-def get_tokens(filename=config.DEFAULT_TOKENS_FILE):
+class FakeUser:
   """
-  Gets authentication tokens.
+  A fake User object.
   """
-  if not os.path.isfile(filename):
-    print("Couldn't find authentication file '{}'.".format(filename))
-  with open(filename, 'r') as fin:
-    tokens = json.load(fin)
-  return tokens
+  def __init__(self, screen_name):
+    self.screen_name = screen_name
 
-class TwitterAPI(tweepy.StreamListener):
-  def __init__(self, tokens):
-    self.auth = tweepy.OAuthHandler(
-      tokens["consumer_key"],
-      tokens["consumer_key_secret"]
-    )
-    self.auth.set_access_token(tokens["access"], tokens["access_secret"])
-    self.api = tweepy.API(self.auth)
-    self.db = persist.Storage()
+class FakeTweet:
+  """
+  A fake Tweet object.
+  """
+  def __init__(self, sender, replying_to, content):
+    self.id = 0
+    self.user = FakeUser(sender)
+    self.in_reply_to_status_id = replying_to
+    self.text = content
+
+class FakeTwitterAPI:
+  """
+  A mockup of TwitterAPI for testing purposes. Uses the given database and
+  doesn't talk to Twitter.
+  """
+  def __init__(self, input_tweets, output_stream, db_filename):
     self.handlers = []
-    self.global_counter = self.db.load_state("unique_counter")
+    self.queue = input_tweets
+    self.out = output_stream
+    self.db = persist.Storage(db_filename)
+    self.global_counter = 0
 
   def register_handler(self, fcn):
     """
@@ -74,14 +65,17 @@ class TwitterAPI(tweepy.StreamListener):
     Handles failed connection attempts.
     """
     if config.DEBUG:
-      print("Connection failed with code {}.".format(status_code))
+      print(
+        "Connection failed with code {}.".format(status_code),
+        file=sys.stderr
+      )
 
   def on_timeout(self):
     """
     Handles connection timeouts.
     """
     if config.DEBUG:
-      print("Connection timed out.")
+      print("Connection timed out.", file=sys.stderr)
 
   def on_disconnect(self, notice):
     """
@@ -92,34 +86,28 @@ class TwitterAPI(tweepy.StreamListener):
         "Disconnecting due to: {}\nReason: {}".format(
           DISCONNECT_CODES[notice["code"]],
           notice["reason"]
-        )
+        ),
+        file=sys.stderr
       )
 
   def stream_user_tweets(self, screen_name):
     """
-    Initiates the streaming process for tweets mentioning a particular user
-    name (supply without the '@'). This method doesn't return until the
-    stream is disconnected.
+    Initiates the (fake) streaming process. screen_name is ignored. This method
+    returns after processing the current input queue (sequentially).
     """
-    self.stream = tweepy.Stream(auth=self.api.auth, listener = self)
-    # TODO: Is using a filter here instead of a user stream correct? Seems
-    # wrong, but user streams don't give you mentions? *Could* go with a
-    # replies-only design?
-    self.stream.filter(
-      track=["@{}".format(screen_name)]
-    )
+    for msg in self.queue:
+      self.on_status(msg)
 
   def stop_streaming(self):
     """
     Stops streaming.
     """
-    self.stream.disconnect()
+    pass
 
   def shutdown(self):
     """
     Shuts down the various connections.
     """
-    self.stream.disconnect()
     self.db.disconnect()
 
   def validate(self, message):
@@ -133,14 +121,13 @@ class TwitterAPI(tweepy.StreamListener):
     Takes a possibly-invalid message and returns a valid message, which may be
     incomplete or otherwise degraded. Note that e.g., links may be broken.
     """
-    return message[config.CHAR_LIMIT]
+    return message[:config.CHAR_LIMIT]
 
   def incremenet_counter(self):
     """
-    Method for incrementing the global counter which saves it to the database.
+    Method for incrementing the global counter. The database is not affected.
     """
     self.global_counter += 1
-    self.db.save_state("unique_counter", self.global_counter)
 
   def ntag(self):
     """
@@ -228,8 +215,15 @@ class TwitterAPI(tweepy.StreamListener):
       else:
         return None
 
-    status = self.api.update_status(status=message)
-    return status.id
+    self.out.write(
+      "To: {}\n{}\n{}\n{}\n".format(
+        "<all>",
+        '-'*80,
+        message,
+        '='*80
+      )
+    )
+    return 0
 
   def tweet_reply(self, reply_to, reply_at, message, force=False):
     """
@@ -238,11 +232,6 @@ class TwitterAPI(tweepy.StreamListener):
     reply_at may also be a list of usernames to reply to multiple people at
     once.
     """
-    # TODO: Double-tagging problem?
-    # TODO: Do we need to explicitly add usernames to content in order to
-    # thread tweets? (see:
-    #   https://developer.twitter.com/en/docs/tweets/post-and-engage/api-reference/post-statuses-update
-    # particularly the section on in_reply_to_status_id)
     if isinstance(reply_at, (list, tuple)):
       message = "{} {}".format(
         ' '.join("@{}".format(at) for at in reply_at),
@@ -257,11 +246,15 @@ class TwitterAPI(tweepy.StreamListener):
       else:
         return None
 
-    status = self.api.update_status(
-      status=message,
-      in_reply_to_status_id=reply_to
+    self.out.write(
+      "To: {}\n{}\n{}\n{}\n".format(
+        reply_to,
+        '-'*80,
+        message,
+        '='*80
+      )
     )
-    return status.id
+    return 0
 
   def tweet_replies(self, reply_to, reply_at, messages, force=False):
     """
@@ -299,31 +292,3 @@ class TwitterAPI(tweepy.StreamListener):
     else:
       last = self.tweet_replies(reply_to, reply_at, payloads, force=True)
     return last
-
-  def handle_mentions(self, callback):
-    """
-    Calls the given callback on any fresh mentions, excluding self-mentions.
-    Note that rate-limiting makes the streaming approach much better for
-    real-time interaction.
-    """
-    lpm = self.db.load_state("last_processed_mention")
-    if lpm:
-      cursor = tweepy.Cursor(
-        self.api.mentions_timeline,
-        since_id=lpm
-      )
-    else:
-      cursor = tweepy.Cursor(self.api.mentions_timeline)
-    new_lpm = None
-    for page in cursor.pages():
-      for tweet in page:
-        if tweet.id == lpm: # quit if we reach processed stuff
-          break
-        if not new_lpm: # save first id encountered:
-          new_lpm = tweet.id
-
-        if tweet.user.screen_name != config.MY_HANDLE:
-          callback(tweet)
-
-    if new_lpm:
-      self.db.save_state("last_processed_mention", new_lpm)

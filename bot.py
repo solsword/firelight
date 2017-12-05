@@ -46,7 +46,7 @@ def handle_story_reply(core, tweet, in_reply_to, sender, current_state):
     return
 
   # Recall the story being responded to:
-  st = core.db.recall_story(author, title)
+  st = core.db.recall_story(title, author)
   if not st:
     core.tweet_long(
       "Sorry, I've forgotten the story '{}' by '{}'. Something is wrong :("
@@ -103,7 +103,7 @@ def handle_general_command(core, tweet, sender):
     args = raw[len(chunks[0]) + len(command) + 1:].strip()
 
   if command in ("help", "[help]"):
-    st = core.db.recall_story(None, "help")
+    st = core.db.recall_story("help")
     if not st:
       core.tweet_long(
         "Sorry, there's no help available.",
@@ -111,12 +111,13 @@ def handle_general_command(core, tweet, sender):
         reply_at=tweet.user.screen_name
       )
     else:
+      replies, node_name, state = st.begin()
       tid = core.tweet_long(
-        story.format_node(st.nodes[st.start]),
+        replies,
         reply_to=tweet.id,
         reply_at=tweet.user.screen_name,
       )
-      core.db.begin_telling(tid, sender, "help")
+      core.db.begin_telling(tid, sender, st, node_name, state)
 
   elif command in ("list", "[list]"):
     core.tweet_long(
@@ -131,7 +132,7 @@ def handle_general_command(core, tweet, sender):
   elif command in ("tell", "[tell]"):
     # TODO: Get author info here and disambiguate!
     target_title = args.strip().lower()
-    st = core.db.recall_story(None, target_title)
+    st = core.db.recall_story(target_title)
     respond_to = tweet.id
     if not st:
       sl = [ title for (title, author) in core.db.story_list() ]
@@ -142,7 +143,7 @@ def handle_general_command(core, tweet, sender):
         cutoff=config.TITLE_DISTANCE_THRESHOLD
       )
       if best_match[0] != None:
-        st = core.db.recall_story(None, best_match[0])
+        st = core.db.recall_story(best_match[0])
         respond_to = core.tweet_long(
           "Ah, you must mean '{}.' Yes, I remember that tale...".format(
             best_match[0].title()
@@ -162,12 +163,13 @@ def handle_general_command(core, tweet, sender):
         tweet.user.screen_name
       )
     else:
+      replies, node_name, state = st.begin()
       tid = core.tweet_long(
-        story.format_node(st.nodes[st.start]),
+        replies,
         respond_to,
         tweet.user.screen_name
       )
-      core.db.begin_telling(tid, sender, st.title)
+      core.db.begin_telling(tid, sender, st, node_name, state)
 
   # TODO: More commands here?
   else:
@@ -182,14 +184,12 @@ def handle_general_command(core, tweet, sender):
 
 PROCESSING_TOTAL = 0
 
-def main():
+def run_bot(core, loop=True):
   """
-  The main loop of the bot.
+  Runs the bot using the given API object. If loop is false, just runs through
+  the main loop once.
   """
   global PROCESSING_TOTAL
-  tk = api.get_tokens()
-  core = api.TwitterAPI(tk)
-
   def handle_mention(tw):
     global PROCESSING_TOTAL
     nonlocal core
@@ -229,6 +229,9 @@ def main():
           print(e, file=sys.stderr)
           traceback.print_tb(e.__traceback__, file=sys.stderr)
       elapsed = time.time() - go
+      if not loop:
+        # we've done our single pass
+        break
       if elapsed < backoff*3:
         backoff *= 2
       else:
@@ -247,6 +250,14 @@ def main():
 
   core.shutdown()
 
+def main():
+  """
+  The main loop of the bot.
+  """
+  tk = api.get_tokens()
+  core = api.TwitterAPI(tk)
+
+  run_bot(core)
 
 if __name__ == "__main__":
   main()

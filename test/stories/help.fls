@@ -1,0 +1,19 @@
+% title: help
+% author: Peter Mawhorter
+% start: help
+
+# help
+
+Firelight is an interactive story engine. Options appear in brackets. Help topics: [[version]] [[links]]
+
+# version
+
+This is Firelight version 0.1. [[back|help]]
+
+# links
+
+Available options are written in [[brackets]]. Reply with an unambiguous prefix to make a decision. [[back|help]]
+
+# brackets
+
+Exactly. Good job following that link! [[back|links]]

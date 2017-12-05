@@ -1,4 +1,5 @@
 firelight.db
+test/test.db
 tokens
 # Byte-compiled / optimized / DLL files
 __pycache__/

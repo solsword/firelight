@@ -4,6 +4,12 @@ diffable.py
 Support for objects that can report their differences.
 """
 
+def show_spaces(string):
+  """
+  Returns a string with whitespace made visible. Newlines are preserved.
+  """
+  return string.replace(' ', '␣').replace('\t', '␉').replace('\r', '␍')
+
 def diff(a, b):
   """
   Returns a list of strings describing differences between objects 'a' and 'b'.
@@ -50,8 +56,15 @@ def diff(a, b):
         for k in b:
           if k not in a:
             differences.append("extra key in B: '{}'".format(k))
-      elif isinstance(a, (int, float, complex, str, bool)):
+      elif isinstance(a, (int, float, complex, bool)):
         return [ "values: {} != {}".format(a, b) ]
+      elif isinstance(a, str):
+        return [
+          "values: '''\n{}\n''' != '''\n{}\n'''".format(
+            show_spaces(a),
+            show_spaces(b)
+          )
+        ]
       else:
         return [ "unknown" ]
 

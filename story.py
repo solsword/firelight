@@ -10,6 +10,8 @@ import re
 
 import editdistance
 
+import config
+
 from packable import pack, unpack
 from diffable import diff
 
@@ -372,6 +374,25 @@ class Story:
       state["_visited_"][node] = 1
     return state
 
+  def begin(self, highlight="bracket"):
+    """
+    Returns a texts-list, node-name, state triple resulting from staring the
+    story at its beginning.
+    """
+    fresh_state = self.initial_state()
+    fresh_state = self.visit(fresh_state, self.start, None)
+    text, fresh_state = self.display_node(
+      self.nodes[self.start],
+      fresh_state,
+      highlight=highlight
+    )
+    self.current_node_text = text
+    return (
+      [ text ],
+      self.start,
+      fresh_state
+    )
+
   # TODO: Prefix-based option selection as promised in help.flj
   def advance(self, node_name, state, decision, highlight="bracket"):
     """
@@ -382,14 +403,7 @@ class Story:
     be modified.
     """
     if node_name not in self.nodes:
-      fresh_state = self.initial_state()
-      fresh_state = self.visit(fresh_state, self.start, None)
-      origin, fresh_state = self.display_node(
-        self.nodes[self.start],
-        fresh_state,
-        highlight=highlight
-      )
-      self.current_node_text = origin
+      origin, start_node, new_state = self.begin(highlight=highlight)
       return (
         [
           "Sorry, I've gotten confused at '{}' in '{}'.".format(
@@ -397,10 +411,9 @@ class Story:
             self.title
           ),
           "Starting over from the beginning.",
-          origin
-        ],
-        self.start,
-        fresh_state
+        ] + origin,
+        start_node,
+        new_state
       )
 
     node = self.nodes[node_name]
@@ -454,26 +467,17 @@ class Story:
     next_node = self.get(next_name)
     if next_node is None:
       # TODO: Log these errors!
-      fresh_state = self.initial_state()
-      fresh_state = self.visit(fresh_state, self.start, None)
-      origin, fresh_state = self.display_node(
-        self.nodes[self.start],
-        fresh_state,
-        highlight=highlight
-      )
-      fresh_state = self.visit(fresh_state, self.start)
-      self.current_node_text = origin
+      origin, start_node, new_state = self.begin(highlight=highlight)
       return (
         [
           "Sorry, I've forgotten '{}' which should come after '{}'.".format(
-            next_node,
+            next_name,
             node_name
           ),
-          "Starting over from the beginning.",
-          format_node(self.nodes[self.start], highlight=highlight)
-        ],
-        self.start,
-        fresh_state
+          "Starting over from the beginning."
+        ] + origin,
+        start_node,
+        new_state
       )
 
     if next_node.is_ending():
@@ -487,11 +491,18 @@ class Story:
       highlight=highlight
     )
     self.current_node_text = next_text
-    return (
-      [ transition_text, next_text ],
-      next_name,
-      new_state
-    )
+    if transition_text:
+      return (
+        [ transition_text, next_text ],
+        next_name,
+        new_state
+      )
+    else:
+      return (
+        [ next_text ],
+        next_name,
+        new_state
+      )
 
   def display_node(self, node, state, context=None, highlight="bracket"):
     """
@@ -504,13 +515,13 @@ class Story:
     """
     if isinstance(node, str):
       node = self.get(node)
-      text, new_state = macro.eval_text(
-        node.content,
-        self,
-        state,
-        context,
-        self.module_finder
-      )
+    text, new_state = macro.eval_text(
+      node.content,
+      self,
+      state,
+      context,
+      self.module_finder
+    )
     return (
       highlight_content(text, node.successors, highlight=highlight),
       new_state
@@ -522,6 +533,8 @@ class Story:
     Similar to display_node (see above).
     """
     transition_text = node.successors[option][1]
+    if not transition_text:
+      return "", state
     result, new_state = macro.eval_text(
       transition_text,
       self,

@@ -274,13 +274,19 @@ class Storage:
     cur.execute("SELECT title, author FROM modules;")
     return [ (row["title"], row["author"]) for row in cur.fetchall()]
 
-  def begin_telling(self, tweet, reader, author, title):
+  def begin_telling(
+    self,
+    tweet,
+    reader,
+    story,
+    at_node,
+    with_state
+  ):
     """
     Creates a new telling in the database starting at the start node of the
     given story with the default starting state.
     """
     cur = self.connection.cursor()
-    story = self.recall_story(author, title)
     # Create a new story for this reader and return its ID.
     cur.execute(
       (
@@ -292,8 +298,8 @@ class Storage:
         reader,
         story.title.lower(),
         story.author.title(),
-        story.start,
-        json.dumps( story.initial_state() ),
+        at_node,
+        json.dumps( with_state ),
         True
       )
     )
@@ -363,7 +369,13 @@ FROM tellings WHERE tweet = ?;
     cache = self.module_cache if is_module else self.story_cache
     if author:
       k = title + "::" + author
-      return cache.get(k, None)
+      item = cache.get(k, None)
+      if item:
+        age, st = item
+        cache[k] = (0, st)
+        return st
+      else:
+        return None
     else:
       possible = []
       for sk in cache:
@@ -373,7 +385,13 @@ FROM tellings WHERE tweet = ?;
       if not possible:
         return None
       sk = sorted(possible)[0]
-      return cache[sk]
+      item = cache.get(sk, None)
+      if item:
+        age, st = item
+        cache[sk] = (0, st)
+        return st
+      else:
+        return None
 
   def cache_story(self, story, is_module=False):
     """

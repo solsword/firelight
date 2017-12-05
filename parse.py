@@ -339,7 +339,7 @@ def parse_first_node(src):
     if transition:
       node["successors"][display] = [destination, transition]
     else:
-      node["successors"][display] = destination
+      node["successors"][display] = [destination, ""]
 
   # Put the revised content into our node:
   node["content"] = content

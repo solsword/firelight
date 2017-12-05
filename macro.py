@@ -5,6 +5,7 @@ See modules/help.fls for a description of the macro system.
 """
 
 import re
+import sys
 import copy
 import traceback
 
@@ -12,7 +13,7 @@ import utils
 
 import ops
 
-MACRO_START = re.compile(r"([a-zA-Z_][a-zA-Z_0-9.]+):")
+MACRO_START = re.compile(r"\([a-zA-Z_][a-zA-Z_0-9.]+\):")
 
 INT_CONSTANT = re.compile(r"([+-])?(0[xo])?([0-9A-Fa-f])+")
 
@@ -932,14 +933,15 @@ def eval_text(text, story, state, context=None, module_finder=None):
           .replace('\t', '\u2409')
         eii = 10 - max(0, 10 - i)
         print(
-          "Warning: Unclosed macro treated as text:\n{}\n{}'''".format(
+          "Warning: Unclosed macro treated as text as position {} in:\n{}\n{}"
+          .format(
             start,
             ectx,
             ' '*eii + '^' + ' '*(60 - eii - 1)
           ),
           file=sys.stderr
         )
-        i = ms+1 # skip past that match
+        i = ms.end() + 1 # skip past that match
         continue
 
       # start and end found -> first add text before macro:
