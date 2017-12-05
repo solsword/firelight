@@ -10,8 +10,6 @@ import re
 
 import editdistance
 
-from state import StateChange
-
 from packable import pack, unpack
 from diffable import diff
 
@@ -32,29 +30,6 @@ STORY_COMMANDS = {
   "/title/": cmd_title,
   "/author/": cmd_title,
 }
-
-def display_node(story, node, state, context=None, highlight="bracket"):
-  """
-  Computes display text for the given node in the given story, including
-  evaluating the node's content. Returns a (display_text, updated_state) pair.
-  The 'context' argument is passed as the _context variable during node
-  evaluation, while the 'highlight' variable controls how options within the
-  text are highlighted (see highlight_content below).
-  """
-  if isinstance(node, str):
-    node = story.get(node)
-  text, new_state = macro.eval_text(node.content, story, state, context)
-  return (
-    highlight_content(text, node.successors, highlight=highlight),
-    new_state
-  )
-
-def display_transition(story, node, option, state):
-  """
-  Computes transition text for taking the given option at the given node.
-  """
-  next = node.successors[option]
-  # TODO: HERE!
 
 def highlight_content(content, successors, highlight="bracket"):
   """
@@ -219,6 +194,7 @@ class Story:
     self.start = start
     self.nodes = nodes
     self.setup = setup or {}
+    self.current_node_text = ""
     if self.start not in self.nodes:
       raise ValueError(
         "Start node '{}' not found among story nodes.".format(self.start)
@@ -356,8 +332,25 @@ class Story:
     result["_title_"] = self.title
     result["_author_"] = self.author
     result["_status_"] = "beginning"
+    result["_visited_"] = {}
     result["_errors_"] = []
     return result
+
+  def visit(self, state, node, prev):
+    """
+    Returns an updated state accounting for a visit to the given node. Call
+    before display_node to set automatic variables. Use node names as
+    arguments, not actual nodes.
+    """
+    state["_prev"] = prev
+    state["_node"] = node
+    if node in state["_visited_"]:
+      state["_once"] = False
+      state["_visited_"][node] += 1
+    else:
+      state["_once"] = True
+      state["_visited_"][node] = 1
+    return state
 
   # TODO: Prefix-based option selection as promised in help.flj
   def advance(self, node_name, state, decision, highlight="bracket"):
@@ -365,10 +358,18 @@ class Story:
     Takes a decision (naming an option at the given node) and figures out how
     the story continues, returning a tuple of continuation texts list, new
     current node, and new story state. The 'highlight' argument is passed
-    through to the format_node function. Note that the state argument may be
-    modified.
+    through to the highlight_content function. Note that the state argument may
+    be modified.
     """
     if node_name not in self.nodes:
+      fresh_state = self.initial_state()
+      fresh_state = self.visit(fresh_state, self.start, None)
+      origin, fresh_state = self.display_node(
+        self.nodes[self.start],
+        fresh_state,
+        highlight=highlight
+      )
+      self.current_node_text = origin
       return (
         [
           "Sorry, I've gotten confused at '{}' in '{}'.".format(
@@ -376,14 +377,15 @@ class Story:
             self.title
           ),
           "Starting over from the beginning.",
-          format_node(self.nodes[self.start], highlight=highlight)
+          origin
         ],
         self.start,
-        self.initial_state()
+        fresh_state
       )
 
     node = self.nodes[node_name]
     if state["_status_"] == "finished":
+      self.current_node_text = "This telling has come to an end."
       return (
         [ "This telling has come to an end." ],
         node_name,
@@ -412,21 +414,35 @@ class Story:
           "I'm not sure what you mean by '{}'.".format(
             decision.lower()
           ),
-          format_node(node, highlight=highlight)
+          self.current_node_text # Don't re-run the node
         ],
         node_name,
         state
       )
 
-    next_name, transition_text = node.successors[matching_key]
+    next_name = node.successors[matching_key][0]
+    transition_text, new_state = self.display_transition(
+      node,
+      matching_key,
+      state
+    )
 
-    if state["_status_"] == "beginning":
-      state["_status_"] = "unfolding"
+    if new_state["_status_"] == "beginning":
+      new_state["_status_"] = "unfolding"
 
     # get the next node:
     next_node = self.get(next_name)
     if next_node is None:
       # TODO: Log these errors!
+      fresh_state = self.initial_state()
+      fresh_state = self.visit(fresh_state, self.start, None)
+      origin, fresh_state = self.display_node(
+        self.nodes[self.start],
+        fresh_state,
+        highlight=highlight
+      )
+      fresh_state = self.visit(fresh_state, self.start)
+      self.current_node_text = origin
       return (
         [
           "Sorry, I've forgotten '{}' which should come after '{}'.".format(
@@ -437,19 +453,46 @@ class Story:
           format_node(self.nodes[self.start], highlight=highlight)
         ],
         self.start,
-        self.initial_state()
+        fresh_state
       )
 
     if next_node.is_ending():
-      state["_status_"] = "finished"
+      new_state["_status_"] = "finished"
 
-    # implement state updates:
-    # TODO: Macros in transition text instead!
-    for sc in state_changes:
-      sc.apply(state)
-
-    return (
-      [ format_node(next_node, highlight=highlight) ],
-      next_name,
-      state
+    new_state = self.visit(new_state, next_node.name, node_name)
+    next_text, new_state = self.display_node(
+      next_node,
+      new_state,
+      context=None, #TODO: links-with-context!!!
+      highlight=highlight
     )
+    self.current_node_text = next_text
+    return (
+      [ transition_text, next_text ],
+      next_name,
+      new_state
+    )
+
+  def display_node(self, node, state, context=None, highlight="bracket"):
+    """
+    Computes display text for the given node, including evaluating the node's
+    content. Returns a (display_text, updated_state) pair. The 'context'
+    argument is passed as the _context variable during node evaluation, while
+    the 'highlight' variable controls how options within the text are
+    highlighted (see highlight_content below).
+    """
+    if isinstance(node, str):
+      node = self.get(node)
+    text, new_state = macro.eval_text(node.content, self, state, context)
+    return (
+      highlight_content(text, node.successors, highlight=highlight),
+      new_state
+    )
+
+  def display_transition(self, node, option, state):
+    """
+    Computes transition text for taking the given option at the given node.
+    """
+    transition_text = node.successors[option][1]
+    result, new_state = macro.eval_text(transition_text, self, state)
+    return result.strip(), new_state

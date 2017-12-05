@@ -102,12 +102,21 @@ Automatic Variables
 
 ===================
 
+Several internal variables may be useful when building nodes:
+
+  _visited_: A dictionary mapping visited node names to the number of visits,
+             which will only have entries for visited nodes. The visit to the
+             current node is already counted here.
+
+  _status_: Either "unfolding" or "finished" depending on whether the current
+            node is and ending.
+
 These node-local variables are available by default when evaluating macros in
 addition to the normal story state:
 
   _context: A list of context values set using either '&' clauses in a link to
             this node, or arguments when this node is called as a macro.
-  _prev: The node name of the previous story node.
+  _prev: The node name of the previous story node, or None if there isn't one.
   _node: The name of the current node.
   _once: Set to True the first time a node is encountered by a player, and
          False on subsequent visits. See also the (once:) and (again:) macros.
