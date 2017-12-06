@@ -177,12 +177,16 @@ class TwitterAPI(tweepy.StreamListener):
   def format_first_message(self, content, reply_at=None):
     """
     Takes content and formats part of it into a tweet, returning that tweet
-    text and any leftover text as a pair.
+    text and any leftover text as a pair. Leaves room for reply-at tags but
+    does not include them in the reply.
     """
     ntag = " " + self.ntag()
     rtag = ""
     if reply_at:
-      rtag = "@{} ".format(reply_at)
+      if isinstance(reply_at, (list, tuple)):
+        rtag = ' '.join("@{}" for at in reply_at) + ' '
+      else:
+        rtag = "@{} ".format(reply_at)
 
     reserved = len(rtag) + len(ntag)
     allowance = config.CHAR_LIMIT - reserved
@@ -192,12 +196,12 @@ class TwitterAPI(tweepy.StreamListener):
       if i == len(content) - 1:
         if i <= allowance:
           return (
-            "{}{}{}".format(rtag, content, ntag),
+            "{}{}".format(content, ntag),
             ""
           )
         else:
           return (
-            "{}{}{}".format(rtag, content[:allowance], ntag),
+            "{}{}".format(content[:allowance], ntag),
             content[allowance:]
           )
       if content[i] in " 	\n":
@@ -206,12 +210,12 @@ class TwitterAPI(tweepy.StreamListener):
         else:
           if backup > 0:
             return (
-              "{}{}{}".format(rtag, content[:backup], ntag),
+              "{}{}".format(content[:backup], ntag),
               content[backup:]
             )
           else:
             return (
-              "{}{}{}".format(rtag, content[:allowance], ntag),
+              "{}{}".format(content[:allowance], ntag),
               content[allowance:]
             )
     raise RuntimeError("Fell out of loop in format_first_message.")
@@ -238,7 +242,6 @@ class TwitterAPI(tweepy.StreamListener):
     reply_at may also be a list of usernames to reply to multiple people at
     once.
     """
-    # TODO: Double-tagging problem?
     # TODO: Do we need to explicitly add usernames to content in order to
     # thread tweets? (see:
     #   https://developer.twitter.com/en/docs/tweets/post-and-engage/api-reference/post-statuses-update

@@ -324,12 +324,12 @@ Handling as reply to node 'help' in "Help" by Peter Mawhorter.
 Id: 3
 Replying to: 1
 --------------------------------------------------------------------------------
-@tester @tester Firelight is an interactive story engine. Options appear in brackets. Help topics: [version] [links] 🐵🦊🐴🐃
+@tester Firelight is an interactive story engine. Options appear in brackets. Help topics: [version] [links] 🐵🦊🐴🐃
 ================================================================================
 Id: 4
 Replying to: 2
 --------------------------------------------------------------------------------
-@tester @tester This is Firelight version 0.1. [back] 🐒🦊🐴🐃
+@tester This is Firelight version 0.1. [back] 🐒🦊🐴🐃
 ================================================================================
 """
 
