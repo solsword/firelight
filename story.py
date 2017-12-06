@@ -444,7 +444,10 @@ class Story:
       # TODO: Better here?
       return (
         [
-          "I'm not sure what you mean by '{}'.".format(
+          (
+            "I don't know how to continue this story with '{}'. "
+            "Double-check the options available?"
+          ).format(
             decision.lower()
           ),
           self.current_node_text # Don't re-run the node

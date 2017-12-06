@@ -10,6 +10,21 @@ def show_spaces(string):
   """
   return string.replace(' ', '␣').replace('\t', '␉').replace('\r', '␍')
 
+def strdiff(a, b):
+  """
+  Diff two strings on a per-line basis, returning a list of differences. Not a
+  great diff algorithm yet...
+  """
+  la = a.split('\n')
+  lb = b.split('\n')
+  results = []
+  for i in range(len(la)):
+    if la[i] != lb[i]:
+      results.append(
+        'line {} →\nA: "{}"\nB: "{}"'.format(i+1, la[i], lb[i]))
+
+  return results
+
 def diff(a, b):
   """
   Returns a list of strings describing differences between objects 'a' and 'b'.
@@ -59,12 +74,7 @@ def diff(a, b):
       elif isinstance(a, (int, float, complex, bool)):
         return [ "values: {} != {}".format(a, b) ]
       elif isinstance(a, str):
-        return [
-          "values: '''\n{}\n''' != '''\n{}\n'''".format(
-            show_spaces(a),
-            show_spaces(b)
-          )
-        ]
+        return strdiff(a, b)
       else:
         return [ "unknown" ]
 

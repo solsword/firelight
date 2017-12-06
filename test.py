@@ -305,8 +305,13 @@ def test_bot_basics():
     ),
     fake_api.FakeTweet( # will be ID 2
       "tester",
-      3,
+      4,
       "version"
+    ),
+    fake_api.FakeTweet( # will be ID 3
+      "tester2",
+      None,
+      "tell \"Help\" by Peter Mawhorter"
     )
   ]
   output = io.StringIO()
@@ -317,19 +322,27 @@ Content: @gathering_round tell help #ignored
 Handling non-reply as a general command.
 From: tester
 Content: version
-In reply to: 3
+In reply to: 4
 Handling as reply to node 'help' in "Help" by Peter Mawhorter.
+From: tester2
+Content: tell "Help" by Peter Mawhorter
+Handling non-reply as a general command.
 """
   expect_posted = """\
-Id: 3
+Id: 4
 Replying to: 1
 --------------------------------------------------------------------------------
 @tester Firelight is an interactive story engine. Options appear in brackets. Help topics: [version] [links] 🐵🦊🐴🐃
 ================================================================================
-Id: 4
+Id: 5
 Replying to: 2
 --------------------------------------------------------------------------------
 @tester This is Firelight version 0.1. [back] 🐒🦊🐴🐃
+================================================================================
+Id: 6
+Replying to: 3
+--------------------------------------------------------------------------------
+@tester2 Firelight is an interactive story engine. Options appear in brackets. Help topics: [version] [links] 🦍🦊🐴🐃
 ================================================================================
 """
 

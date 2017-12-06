@@ -49,7 +49,7 @@ def handle_story_reply(core, tweet, in_reply_to, sender, current_state):
   st = core.db.recall_story(title, author)
   if not st:
     core.tweet_long(
-      "Sorry, I've forgotten the story '{}' by '{}'. Something is wrong :("
+      "Sorry, I've forgotten the story \"{}\" by {}. Something is wrong :("
       .format(
         title,
         author
@@ -130,9 +130,19 @@ def handle_general_command(core, tweet, sender):
     )
 
   elif command in ("tell", "[tell]"):
-    # TODO: Get author info here and disambiguate!
-    target_title = args.strip().lower()
-    st = core.db.recall_story(target_title)
+    target_title = args.strip()
+    if '"' in target_title:
+      # TODO: More robust quote processing?
+      sq = target_title.index('"')
+      eq = target_title.index('"', sq+1)
+      title_part = target_title[sq+1:eq]
+      author_part = target_title[eq+1:].strip()
+      if author_part.startswith("by "):
+        author_part = author_part[3:]
+      st = core.db.recall_story(title_part.title(), author_part.title())
+    else:
+      st = core.db.recall_story(target_title.title())
+
     respond_to = tweet.id
     if not st:
       sl = [ title for (title, author) in core.db.story_list() ]
