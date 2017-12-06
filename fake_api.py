@@ -19,12 +19,16 @@ class FakeUser:
   def __init__(self, screen_name):
     self.screen_name = screen_name
 
+def next_int(state=[0]):
+  state[0] += 1
+  return state[0]
+
 class FakeTweet:
   """
   A fake Tweet object.
   """
   def __init__(self, sender, replying_to, content):
-    self.id = 0
+    self.id = next_int()
     self.user = FakeUser(sender)
     self.in_reply_to_status_id = replying_to
     self.text = content
@@ -215,15 +219,17 @@ class FakeTwitterAPI:
       else:
         return None
 
+    tid = next_int()
     self.out.write(
-      "To: {}\n{}\n{}\n{}\n".format(
+      "Id: {}\nReplying to: {}\n{}\n{}\n{}\n".format(
+        tid,
         "<all>",
         '-'*80,
         message,
         '='*80
       )
     )
-    return 0
+    return tid
 
   def tweet_reply(self, reply_to, reply_at, message, force=False):
     """
@@ -246,15 +252,17 @@ class FakeTwitterAPI:
       else:
         return None
 
+    tid = next_int()
     self.out.write(
-      "To: {}\n{}\n{}\n{}\n".format(
+      "Id: {}\nReplying to: {}\n{}\n{}\n{}\n".format(
+        tid,
         reply_to,
         '-'*80,
         message,
         '='*80
       )
     )
-    return 0
+    return tid
 
   def tweet_replies(self, reply_to, reply_at, messages, force=False):
     """

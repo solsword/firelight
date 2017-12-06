@@ -197,12 +197,23 @@ def run_bot(core, loop=True):
     sender = tw.user.screen_name
     if tw.in_reply_to_status_id != None: # a reply to a tweet
       replying_to = tw.in_reply_to_status_id
+      print("In reply to: {}".format(replying_to))
       rec = core.db.recall_telling(replying_to)
       if rec: # Replying to a live story node
+        reader, title, author, node, state, is_head = rec
+        print(
+          "Handling as reply to node '{}' in \"{}\" by {}.".format(
+            node,
+            title,
+            author
+          )
+        )
         handle_story_reply(core, tw, replying_to, sender, rec)
       else: # Not a story-interaction reply
+        print("Handling reply as a general command.")
         handle_general_command(core, tw, sender)
     else: # must be a general command:
+      print("Handling non-reply as a general command.")
       handle_general_command(core, tw, sender)
     PROCESSING_TOTAL += 1
 

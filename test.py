@@ -28,6 +28,7 @@ import macro
 import fake_api
 import load_stories
 import bot
+import rdb
 
 all_tests = []
 def test(f):
@@ -297,19 +298,44 @@ def test_bot_basics():
   Tests the most basic bot functionality.
   """
   queue = [
-    fake_api.FakeTweet(
+    fake_api.FakeTweet( # will be ID 1
       "tester",
-      0,
+      None,
       "@{} tell help #ignored".format(config.MY_HANDLE)
+    ),
+    fake_api.FakeTweet( # will be ID 2
+      "tester",
+      3,
+      "version"
     )
   ]
   output = io.StringIO()
-  expected = """\
-To: 0
+  expect_printed = """\
+Initiating streaming connection...
+From: tester
+Content: @gathering_round tell help #ignored
+Handling non-reply as a general command.
+From: tester
+Content: version
+In reply to: 3
+Handling as reply to node 'help' in "Help" by Peter Mawhorter.
+"""
+  expect_posted = """\
+Id: 3
+Replying to: 1
 --------------------------------------------------------------------------------
 @tester @tester Firelight is an interactive story engine. Options appear in brackets. Help topics: [version] [links] 🐵🦊🐴🐃
 ================================================================================
+Id: 4
+Replying to: 2
+--------------------------------------------------------------------------------
+@tester @tester This is Firelight version 0.1. [back] 🐒🦊🐴🐃
+================================================================================
 """
+
+  # Clean out the test database:
+  rdb.reset_db("test/test.db")
+
   # create a fake API object
   fcore = fake_api.FakeTwitterAPI(queue, output, "test/test.db")
 
@@ -324,17 +350,37 @@ To: 0
     as_modules=True
   )
 
-  # run the bot through one processing loop
+  # run the bot through one processing loop, capturing stdout
+  old_stdout = sys.stdout
+  capture = io.StringIO()
+  sys.stdout = capture
+
   bot.run_bot(fcore, loop=False)
-  result = output.getvalue()
-  assert result == expected, (
+
+  sys.stdout = old_stdout
+
+  posted = output.getvalue()
+  printed = capture.getvalue()
+
+  assert printed == expect_printed, (
     (
-      "Bot output differs from expected output:\n```\n{}\n```\n{}\n```"
+      "Bot printed output differs from expected output:\n```\n{}\n```\n{}\n```"
       "\nDifferences:\n  {}"
     ).format(
-      result,
-      expected,
-      "\n  ".join(diff(result, expected))
+      printed,
+      expect_printed,
+      "\n  ".join(diff(printed, expect_printed))
+    )
+  )
+
+  assert posted == expect_posted, (
+    (
+      "Bot posted output differs from expected output:\n```\n{}\n```\n{}\n```"
+      "\nDifferences:\n  {}"
+    ).format(
+      posted,
+      expect_posted,
+      "\n  ".join(diff(posted, expect_posted))
     )
   )
 

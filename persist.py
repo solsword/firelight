@@ -164,7 +164,7 @@ class Storage:
     """
     table = "modules" if is_module else "stories"
     cur = self.connection.cursor()
-    title = story.title.lower()
+    title = story.title.title()
     author = story.author.title()
     cur.execute(
       "SELECT * FROM {} WHERE title = ? AND author = ?;".format(table),
@@ -206,7 +206,7 @@ class Storage:
     # TODO: maximize packing efficiency
     cur.execute(
       "UPDATE {} SET package = ? WHERE title = ? AND author = ?;".format(table),
-      ( json.dumps(pack(story)), story.title.lower(), story.author.title() )
+      ( json.dumps(pack(story)), story.title.title(), story.author.title() )
     )
     # TODO: Error handling here
     self.connection.commit()
@@ -226,12 +226,12 @@ class Storage:
     if author is None:
       cur.execute(
         "SELECT package FROM {} WHERE title = ?;".format(table),
-        ( title.lower(), )
+        ( title.title(), )
       )
     else:
       cur.execute(
         "SELECT package FROM {} WHERE title = ? AND author = ?;".format(table),
-        ( title.lower(), author.title() )
+        ( title.title(), author.title() )
       )
     rows = cur.fetchall()
     if len(rows) < 1:
@@ -296,7 +296,7 @@ class Storage:
       (
         tweet,
         reader,
-        story.title.lower(),
+        story.title.title(),
         story.author.title(),
         at_node,
         json.dumps( with_state ),
