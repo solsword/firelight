@@ -6,6 +6,8 @@ Various utility functions.
 
 import re
 
+import collections
+
 def or_strlist(alternatives):
   """
   Returns a string listing out alternatives, using commas naturally depending
@@ -88,13 +90,13 @@ class UnmatchedError(Exception):
   """
   pass
 
-def matching_brace(src, idx, op='(', cl=')'):
+def matching_brace(src, idx, op='(', cl=')', qc='"'):
   """
   Finds the matching closing brace starting from the given index in the given
   string (the given index is assumed to be an open brace; this assumption is
   not checked). The opening and closing brace characters may be specified using
   the 'op' and 'cl' parameters, which default to '(' and ')'. Nested braces of
-  the same type and strings quoted using double quotes are ignored.
+  the same type and strings quoted using the given quote character are ignored.
 
   Returns the index of the matching brace found.
 
@@ -111,6 +113,8 @@ def matching_brace(src, idx, op='(', cl=')'):
     matching_brace("()()", 2) == 3
     ```>
     matching_brace("(()())", 0) == 5
+    ```>
+    matching_brace('("quoted)")', 0) == 10
     ```x
     matching_brace("((())", 0)
     ```!
@@ -126,7 +130,7 @@ def matching_brace(src, idx, op='(', cl=')'):
       escaped = not escaped
     elif escaped:
       escaped = False
-    elif c == '"':
+    elif c == qc:
       quoted = not quoted
     elif quoted:
       pass
@@ -214,6 +218,55 @@ def string_literal(src, idx, qc='"'):
     )
   )
 
+def find_quoted_regions(text, qc='"'):
+  """
+  Returns an ordered dictinoary from (start, end) index pairs to quoted content
+  (with escapes processed) for quoted regions in the given text.
+
+  Example:
+    ```?
+    find_quoted_regions(r'one, "two,three", four "fi\\"ve"', qc='"')
+    ```=
+    collections.OrderedDict(
+      [
+        ((5, 15), "two,three"),
+        ((23, 30), 'fi"ve')
+      ]
+    )
+    ```
+  """
+  escaped = False
+  result = []
+
+  # First, find all quoted regions:
+  quoted_regions = collections.OrderedDict()
+  i = -1
+  while i < len(text) - 1:
+    i += 1
+    c = text[i]
+    if c == qc:
+      ei, qcont = string_literal(text, i, qc=qc)
+      quoted_regions[(i, ei)] = qcont
+      i = ei + 1 # skip ahead
+
+  return quoted_regions
+
+def find_region(sorted_region_list, index):
+  """
+  Tests whether a list of (start, end) index pairs includes the given index in
+  one of the listed regions. Returns either the earliest-starting (and
+  earliest-ending, if there's a tie) region including the listed index, or
+  None.
+  """
+  for r in sorted_region_list:
+    if r[0] > index:
+      return None
+
+    if r[0] <= index and r[1] >= index:
+      return r
+
+  return None
+
 def split_unquoted(src, delim=',', qc='"'):
   """
   Splits the entire src string into items delimited by the given delimiter
@@ -236,32 +289,17 @@ def split_unquoted(src, delim=',', qc='"'):
   d = re.compile(delim, re.MULTILINE)
 
   # First, find all quoted regions:
-  quoted_regions = {}
-  i = -1
-  while i < len(src):
-    i += 1
-    c = src[i]
-    if c == qc:
-      ei, qcont = string_literal(src, i, qc=qc)
-      quoted_regions[(i, ei)] = qcont
-      i = ei + 1 # skip ahead
+  quoted_regions = find_quoted_regions(src, qc=qc)
 
   # Next, look for delimiters:
   delimiters = []
   i = -1
-  while i < len(src):
+  while i < len(src) - 1:
     i += 1
     match = d.search(src, pos=i)
     if match:
       mp = match.start()
-      is_quoted = False
-      for qr in quoted_regions:
-        if qr[0] < mp < qr[1]: # was quoted; skip to end of quote
-          i = qr[1]
-          is_quoted = True
-          break
-
-      if is_quoted:
+      if find_region(quoted_regions, mp):
         continue
 
       delimiters.append(match)
@@ -284,7 +322,7 @@ def split_unquoted(src, delim=',', qc='"'):
   simplified = []
   for b in bits:
     sb = b.strip()
-    if sb[0] == qc:
+    if sb and sb[0] == qc:
       try:
         ei, sl = string_literal(sb, 0, qc=qc)
         if ei == len(sb) - 1:

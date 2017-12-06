@@ -18,17 +18,13 @@ import parse
 
 from packable import pack, unpack
 
-
-def load_story(core, filename, force=False, fmt="auto", is_module=False):
+def load_story_from_file(filename, fmt="auto"):
   """
-  Loads a story into the database of the given core API object from the given
-  file. Prints a warning and does nothing if the file cannot be loaded or if
-  the title is a duplicate. Duplicates are overwritten without a warning if
-  'force' is True. The fmt argument decides which format to load, "json" for
-  JSON format, and "story" for Markdown-like format, or "auto" to choose based
-  on the start of the file (just checks whether the first two non-whitespace
-  characters are '{' and '"', in which case it uses JSON). If is_module is
-  True, the story is loaded (and stored) as a module instead of as a story.
+  Loads a Story object from a filename. Prints a warning and does nothing if
+  the file cannot be loaded. The fmt argument decides which format to load,
+  "json" for JSON format, and "story" for Markdown-like format, or "auto" to
+  choose based on the start of the file (just checks whether the first two
+  non-whitespace characters are '{' and '"', in which case it uses JSON). 
   """
   with open(filename, 'r') as fin:
     try:
@@ -58,9 +54,21 @@ def load_story(core, filename, force=False, fmt="auto", is_module=False):
       if config.DEBUG:
         print(e, file=sys.stderr)
         traceback.print_tb(e.__traceback__, file=sys.stderr)
-      return
+      return None
 
-    core.db.save_new_story(st, force=force, is_module=is_module)
+  return st
+
+def load_story(core, filename, force=False, fmt="auto", is_module=False):
+  """
+  Loads a story into the database of the given core API object from the given
+  file. Duplicates are overwritten without a warning if 'force' is True,
+  otherwise a warning is issued and nothing happens.  If is_module is True, the
+  story is loaded (and stored) as a module instead of as a story.
+  """
+  st = load_story_from_file(filename, fmt=fmt)
+  if not st:
+    return # warning already printed
+  core.db.save_new_story(st, force=force, is_module=is_module)
 
 def load_stories_from_directory(core, directory, force=False, as_modules=False):
   """

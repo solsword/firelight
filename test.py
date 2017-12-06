@@ -281,13 +281,33 @@ def mktest_docstring(fcn):
   the_test.__name__ = "test_" + fcn.__name__
   return the_test
 
+@test
+def test_macro_regex():
+  """
+  Tests the macro.MACRO_START regex.
+  """
+  text = '''
+(once~
+ Disclaimer: This is a work of fiction and is not intended to aid in
+ identifying edible mushrooms. NEVER eat a mushroom unless you are absolutely
+ certain it is not poisonous, as many edible species look very similar to
+ poisonous ones, and as a result fatal poisonings occur worldwide every year.
+)
+'''
+  assert macro.MACRO_START.search(text, 0) != None, (
+    "MACRO_START regex failed."
+  )
+  return True
+
 for f in [
   utils.string_literal,
   utils.split_unquoted,
+  utils.find_quoted_regions,
   utils.matching_brace,
   macro.parse_expr,
   macro.eval_expr,
   macro.eval_macro,
+  macro.eval_text,
   parse.parse_metadata,
 ]:
   mktest_docstring(f)

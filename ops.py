@@ -12,8 +12,8 @@ OPERATOR_PRECEDENCE = {
   '-': 50,
   '*': 100,
   '**': 200,
-  '~': 200,
-  '~~': 200,
+  '%': 200,
+  '%%': 200,
   '|': 200,
   '&': 200,
   '^': 200,
@@ -117,9 +117,10 @@ def u_plus(state, val):
 def u_minus(state, val):
   return -val, state
 
-@op('~', int)
-def u_flip(state, val):
-  return ~val, state
+# TODO: What about this?!?
+#@op('%', int)
+#def u_flip(state, val):
+#  return ~val, state
 
 # Math operators
 # --------------
@@ -261,8 +262,6 @@ def bit_and(state, lhs, rhs):
 def bit_and(state, lhs, rhs):
   return lhs ^ rhs, state
 
-# '~' is defined above with the other unary operators
-
 # String operators
 # ----------------
 
@@ -286,11 +285,11 @@ def search_str(state, lhs, rhs):
 def search_simple_str(state, lhs, rhs):
   return rhs in lhs, state
 
-@op('~', str, str, str)
+@op('%', str, str, str)
 def replace_str(state, lhs, rhs, rrhs):
   return re.sub(rhs, rrhs, lhs), state
 
-@op('~~', str, str, str)
+@op('%%', str, str, str)
 def replace_simple_str(state, lhs, rhs, rrhs):
   return lhs.replace(rhs, rrhs), state
 
@@ -325,7 +324,7 @@ def times_lst(state, lhs, rhs):
 def search_lst(state, lhs, rhs):
   return rhs in lhs, state
 
-@op('~', list, "*", "*")
+@op('%', list, "*", "*")
 def replace_lst(state, lhs, find, repl):
   result = []
   for val in lhs:

@@ -367,16 +367,16 @@ class Story:
     state["_prev"] = prev
     state["_node"] = node
     if node in state["_visited_"]:
-      state["_once"] = False
+      state["_first"] = False
       state["_visited_"][node] += 1
     else:
-      state["_once"] = True
+      state["_first"] = True
       state["_visited_"][node] = 1
     return state
 
   def begin(self, highlight="bracket"):
     """
-    Returns a texts-list, node-name, state triple resulting from staring the
+    Returns a (texts-list, node-name, state0 triple resulting from staring the
     story at its beginning.
     """
     fresh_state = self.initial_state()

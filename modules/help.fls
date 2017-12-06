@@ -53,26 +53,34 @@ Built-in Macros
 The following built-in macros can be used. Note that if a story node shares the
 name of a built-in macro, the story node will be used instead.
 
-  (eval\: expr : expr : ...)
+  (set\~ variable ~ expr)
+    Evaluates the expression and sets the given variable's value to the result.
+    Returns the value assigned.
+
+  (add\~ variable ~ expr)
+    Evaluates the expression and adds the result to the given variable. Returns
+    the computed modifier value.
+
+  (eval\~ expr ~ expr ~ ...)
     Takes a one or more expressions as context and results in the result of
     evaluating those expressions. If one expression is given, its result is
     returned, otherwise a list is returned containing the results of evaluating
     each expression given.
 
-  (text\: expr : expr : ...)
+  (text\~ expr ~ expr ~ ...)
     Takes multiple expressions, evaluates each, and concatenates them all into
     one big result text. Useful with the '!' [[operator|expressions]].
 
-  (lookup\: object : key)
+  (lookup\~ object ~ key)
     Evaluates the object and key [[expressions]] and looks up the given key in
     the given object.
 
-  (context\: N)
+  (context\~ N)
     Inserts the value of the given context variable, counting from 1. Use '&'
     clauses on links to set context, or use extra arguments when calling a node
     as a macro. Invalid values of N will result in None.
 
-  (if\: condition : result : condition : result : ... : else : result)
+  (if\~ condition ~ result ~ condition ~ result ~ ... ~ else ~ result)
     Basic conditional text/evaluation. Expands to the first 'result' text for
     which the associated condition evaluates to True, or to the text of the
     first 'else' case (non-first else cases are ignored; the use of 'else' as a
@@ -82,16 +90,16 @@ name of a built-in macro, the story node will be used instead.
     condition will be expanded before testing, so early-termination of and/or
     statements
 
-  (once\: text)
+  (once\~ text)
     The given text will only appear (and macros inside will only be expanded)
-    on the player's first visit to the containing node. Note that a (once:)
-    nested inside an (if:) won't trigger on subsequent node visits even if the
-    (if:) kept it from appearing the first time. (once:) is exactly equivalent
-    to (if: _first: text).
+    on the player's first visit to the containing node. Note that a (once~)
+    nested inside an (if~) won't trigger on subsequent node visits even if the
+    (if~) kept it from appearing the first time. (once~) is exactly equivalent
+    to (if~ _first ~ text).
 
-  (again\: text)
+  (again\~ text)
     The given text will only appear on return visits to a story node. This is
-    exactly equivalent to (if: not _first: text).
+    exactly equivalent to (if~ not _first ~ text).
 
   TODO: More of these?
 
@@ -119,7 +127,7 @@ addition to the normal story state:
   _prev: The node name of the previous story node, or None if there isn't one.
   _node: The name of the current node.
   _once: Set to True the first time a node is encountered by a player, and
-         False on subsequent visits. See also the (once:) and (again:) macros.
+         False on subsequent visits. See also the (once~) and (again~) macros.
 
   TODO: More of these?
 
@@ -136,7 +144,7 @@ the appropriate type. Within expressions, story variables may also be used. The
 '[[eval|builtins]]' built-in macro can be used to evaluate an expression.
 
 Node-local variables start with '_', while system variables both start and end
-with '_'. Note that some macros, like (set:), have side effects, so
+with '_'. Note that some macros, like (set~), have side effects, so
 order-of-expansion can matter. Macros are expanded beginning-to-end of node,
 one expansion at a time, so that a series of nested expansions will all happen
 before any later expansion.
@@ -158,8 +166,9 @@ Legal operators in expressions are:
   and, or, and not
     Standard boolean operators; same meaning as in Python.
 
-  &, |, ^, ~
+  &, |, ^
     Bitwise operators; same meaning as in Python.
+    TODO: Something about unary-~
     
   +, -, *
     '+' concatenates strings, while '*' multiplies strings as in Python. '-'
@@ -173,31 +182,31 @@ Legal operators in expressions are:
     match of the RHS. '/' can also be used to search lists, but only for exact
     matches in that case.
     
-  ~, ~~
-    '~' performs regular expression replacement within the LHS, using two RHS
-    string values as pattern and replacement parts. '~~' functions like '~' but
+  %, %%
+    '%' performs regular expression replacement within the LHS, using two RHS
+    string values as pattern and replacement parts. '%%' functions like '%' but
     treats its arguments as simple strings instead of regular expressions. '/',
-    '//', '~', and '~~' bind leftward, so several searches/replacements can be
+    '//', '%', and '%%' bind leftward, so several searches/replacements can be
     listed after an original string and they'll apply to it one after the other
-    instead of applying to each other. '~' also works to replace values in
+    instead of applying to each other. '%' also works to replace values in
     lists.
       ```>
-      "abc abc" ~ "abc" "123" = "123 123"
+      `abc abc` % `abc` `123` = `123 123`
       ```>
-      "abc azc" ~ "a(.)c" "_\1_" = "_b_ _z_"
+      `abc azc` % `a(.)c` `_\1_` = `_b_ _z_`
       ```>
-      "(()())" ~~ "()" "\1" = "(11)"
+      `(()())` %% `()` `\1` = `(11)`
       ```
 
   ^, ^^
     When applied with a string as the LHS, performs a split operation using the
     RHS to create a list. Examples:
       ```>
-      "abc def" ^ " " = ["abc", "def"]
+      `abc def` ^ ` ` = [`abc`, `def`]
       ```>
-      "a.b" ^ "." = ["", "", "", ""]
+      `a.b` ^ `.` = [``, ``, ``, ``]
       ```>
-      "a.b" ^^ "." = ["a", "b"]
+      `a.b` ^^ `.` = [`a`, `b`]
       ```
 
   +, *
@@ -223,16 +232,16 @@ Legal operators in expressions are:
 
       int -> 0
       float -> 0.0
-      string -> ""
+      string -> ``
       list -> []
       dict -> {}
       ??? -> None
 
     Examples:
       ```>
-      ([] | + ", ") = ""
+      ([] | + `, `) = ``
       ```>
-      (["A", "B", "C"] | + ", ") = "A, B, C"
+      ([`A`, `B`, `C`] | + `, `) = `A, B, C`
       ```>
       ([True, False, True] | or False) = True
       ```>
@@ -259,16 +268,16 @@ Legal operators in expressions are:
     
     Examples:
       ```>
-      [ 1, 2, 3 ] ! (add: 1 : ?) == [ 2, 3, 4 ]
+      [ 1, 2, 3 ] ! (add~ 1 ~ ?) == [ 2, 3, 4 ]
       ```>
-      [ 1, 2, 3 ] ! (times: 2 : ?) == [ 2, 4, 6 ]
+      [ 1, 2, 3 ] ! (times~ 2 ~ ?) == [ 2, 4, 6 ]
       ```>
-      [ "Ariel", "Ibrahim", "Sapna" ] ! (text: "Hello " : ?) ==
-      [ "Hello Ariel", "Hello Ibrahim", "Hello Sapna" ]
+      [ `Ariel`, `Ibrahim`, `Sapna` ] ! (text~ `Hello ` ~ ?) ==
+      [ `Hello Ariel`, `Hello Ibrahim`, `Hello Sapna` ]
       ```>
-      { "a": 1, "b": 2, "c": 3 } ! (eval: ? + 2) ==
-      { "a": 3, "b": 4, "c": 5 }
+      { `a`: 1, `b`: 2, `c`: 3 } ! (eval~ ? + 2) ==
+      { `a`: 3, `b`: 4, `c`: 5 }
       ```>
-      { "a": 1, "b": 2, "c": 3 } ! (eval: @[#] + 2) ==
-      { "a": 3, "b": 4, "c": 5 }
+      { `a`: 1, `b`: 2, `c`: 3 } ! (eval~ @[#] + 2) ==
+      { `a`: 3, `b`: 4, `c`: 5 }
       ```

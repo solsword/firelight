@@ -15,15 +15,29 @@ def strdiff(a, b):
   Diff two strings on a per-line basis, returning a list of differences. Not a
   great diff algorithm yet...
   """
-  la = a.split('\n')
-  lb = b.split('\n')
-  results = []
-  for i in range(len(la)):
-    if la[i] != lb[i]:
-      results.append(
-        'line {} →\nA: "{}"\nB: "{}"'.format(i+1, la[i], lb[i]))
+  if '\n' in a or '\n' in b:
+    la = a.split('\n')
+    lb = b.split('\n')
+    results = []
+    for i in range(len(la)):
+      if i < len(lb) and la[i] != lb[i]:
+        results.append(
+          'line {} →\nA: "{}"\nB: "{}"'.format(i+1, la[i], lb[i])
+        )
+      elif i >= len(lb):
+        results.append(
+          'extra line in A: "{}"'.format(la[i])
+        )
 
-  return results
+    if len(lb) > len(la):
+      for i in range(len(la), len(lb)):
+        results.append(
+          'extra line in B: "{}"'.format(lb[i])
+        )
+
+    return results
+  else:
+    return [ '"{}" != "{}"'.format(a, b) ]
 
 def diff(a, b):
   """

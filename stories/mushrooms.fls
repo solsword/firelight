@@ -40,46 +40,46 @@
 
 # trail
 
-(once:
- Disclaimer\: This is a work of fiction and is not intended to aid in
+(once~
+ Disclaimer: This is a work of fiction and is not intended to aid in
  identifying edible mushrooms. NEVER eat a mushroom unless you are absolutely
  certain it is not poisonous, as many edible species look very similar to
  poisonous ones, and as a result fatal poisonings occur worldwide every year.
 )
 
-(again:
-  (if:
-  : lost = 0: ``no extra text in this case
-  : lost < 3: You've found your way back. (set: lost : 0)
-  : lost < 6: You've found the trail again. For a moment there, you were worried. (set: lost : 0)
-  : else: Finally, you've found the trail again! Now that you're back, you wonder how you were ever lost. (set: lost : 0)
+(again~
+  (if~
+  ~ lost = 0 ~ ``no extra text in this case
+  ~ lost < 3 ~ You've found your way back. (set: lost : 0)
+  ~ lost < 6 ~ You've found the trail again. For a moment there, you were worried. (set~ lost ~ 0)
+  ~ else ~ Finally, you've found the trail again! Now that you're back, you wonder how you were ever lost. (set: lost : 0)
   )
 )
 
 You're alone in the crisp autumn forest, surrounded by vermillion leaves and
 the scent of wet earth on a faint trail through the hills.
 
-(once: You're here for mushrooms, and after a few days of rain, you don't
+(once~ You're here for mushrooms, and after a few days of rain, you don't
 expect to be disappointed.
 
-[[Uphill|birch|You hike uphill away from the trail.(add: lost : 1)]] from you, a stand of birch an aspen dominates the hilltop.
+[[Uphill|birch|You hike uphill away from the trail.(add~ lost ~ 1)]] from you, a stand of birch an aspen dominates the hilltop.
 
-At the bottom of the hill, a depression has developed into a small [[bog||You set off downhill away from the trail, losing your vantage point as you descend.(add: lost : 2)]].
+At the bottom of the hill, a depression has developed into a small [[bog||You set off downhill away from the trail, losing your vantage point as you descend.(add~ lost ~ 2)]].
 
-Ahead of you, a few [[pines|pine|You walk a short distance to the pines, leaving the trail as it twists away uphill.(add: lost : 1)]] proudly retain their needles.
+Ahead of you, a few [[pines|pine|You walk a short distance to the pines, leaving the trail as it twists away uphill.(add~ lost ~ 1)]] proudly retain their needles.
 
-Of course, you could just start searching among the oaks and maples right [[here|oak|You wander a short distance from the trail.(add: lost : 1)]]
+Of course, you could just start searching among the oaks and maples right [[here|oak|You wander a short distance from the trail.(add~ lost ~ 1)]]
 )
 
-(again:
-  (if:
-  : (inv.count: "#mushroom") = 0:
+(again~
+  (if~
+  ~ (inv.count~ `#mushroom`) = 0 ~
     It's a shame you didn't find anything, but hunting is always a matter of
     luck.
-  : (inv.count: "#mushroom") < 4:
+  ~ (inv.count~ `#mushroom`) < 4 ~
     You've collected a few specimens, but you wish you'd had time to look for
     more.
-  : else:
+  ~ else ~
     You've got plenty of mushrooms to sort out when you get back.
   )
   In any case, the sun is starting to dip towards the opposite hill, and you've got ground to cover before you're out of these woods. It's time to go [[home]].
@@ -90,43 +90,43 @@ Of course, you could just start searching among the oaks and maples right [[here
 
 Finally back in the warmth of your apartment, you strip off your coat and boots and empty your pockets.
 
-(if:
-: (inv.count: "#mushroom") = 0:
+(if~
+~ (inv.count~ `#mushroom`) = 0 ~
   Sadly, there's nothing inside them but a few flecks of lint.
-: (inv.count: "#mushroom") < 4:
+~ (inv.count~ `#mushroom`) < 4 ~
   You've managed to collect a few specimens:
-: else:
+~ else ~
   You've assembled quite a nice collection:
 )
 
-(if:
-  (inv.count: "#mushroom") > 0:
-    (list.show: (inv.list: "#mushroom") : lines : fancy)
+(if~
+  (inv.count~ `#mushroom`) > 0 ~
+    (list.show~ (inv.list~ `#mushroom`) ~ lines ~ fancy)
 
-    ``TODO: HERE
+    ``TODO~ HERE
 )
 
 
 # oak
 
-Surrounded by majestic hardwoods at the peak of their fall colors, it takes effort not to be distracted by the scenery. Lying about amidst the oaks and maples are some fallen [[trunks|oak-logs|(add: lost : 1)]], the perfect substrate for a few different types of fungus. You could instead look on the standing [[trees|oak-trunks|(add: lost : 1)]] themselves, or among the leaf-[[litter|oat-litter|(add:lost : 1)]] between their roots.
+Surrounded by majestic hardwoods at the peak of their fall colors, it takes effort not to be distracted by the scenery. Lying about amidst the oaks and maples are some fallen [[trunks|oak-logs|(add~ lost ~ 1)]], the perfect substrate for a few different types of fungus. You could instead look on the standing [[trees|oak-trunks|(add~ lost ~ 1)]] themselves, or among the leaf-[[litter|oat-litter|(add~lost ~ 1)]] between their roots.
 
-(again:
-  If you're bored of searching here, you could always head towards the [[pine|(check-lost: pine)|(add:lost : 1)]] grove that's visible ahead, or head [[uphill|(check-lost: birch)|(add: lost : 1)]] towards the birches and aspens.
+(again~
+  If you're bored of searching here, you could always head towards the [[pine|(check-lost~ pine)|(add~lost ~ 1)]] grove that's visible ahead, or head [[uphill|(check-lost~ birch)|(add~ lost ~ 1)]] towards the birches and aspens.
 
-  (head-back:)
+  (head-back~)
 )
 
 
 # oak-logs
 
 You search the fallen logs, ignoring scaly lichens and fuzzy mosses in your hunt for mushrooms.
-(weighted-random:
-: 10 : Unfortunately, you just can't seem to find any. >>oak
-: 30 : You spot a colony of ragged white shelves with dark undersides growing in stacks on the bark of a fallen oak. There are plenty of them, but they seem difficult to dislodge. Do you try to collect them? [[yes|oak|(inv.plus smoky-polypore)You peel off the flat layers in rough strips, leaving much of the fungus attached to the bark. The strips seem tough and leathery.]] / [[no|oak|You leave the rows of fungus alone, looking for something easier to gather.]]
-: 30 : You see a frilly flat colony growing on an old stump, with pretty stripes and white multi-lobed edges. Several layers overlap each other and the mushroom looks rather tough. Do you collect it? [[yes|oak|(inv.plus turkey-tail)You rip layers of the colorful fungus from the bark, gripping its velvety surface.]] / [[no|oak|You leave the frills alone, estimating they'd be more useful for decorating than cooking.]]
-: 20 : You notice a few round creamy-yellow trumpet-shaped mushrooms sprouting from a dead trunk nearby. Inspecting them closely, you see a beautiful honeycomb of white gills underneath their fuzzy caps. Do you pick them? [[yes|oak|(inv.plus diamond-polypore)You pry the mushrooms from the dead wood, feeling their spongy texture.]] / [[no|oak|You leave the mushrooms on the dead tree, reluctant to disturb their beauty.]]
-: 10 : You bend over to peek at the back side of a fallen maple trunk and see a shaggy-looking bunch white stems growing out of the dead wood. The mushroom doesn't have a cap or stem, but it is certainly some kind of fungal growth. Do you pick it? [[yes|oak|(inv.plus bears-head-tooth)You pluck the feathery mass and stuff it into your pocket. Who knows, it might be delicious.]] / [[no|oak|Always good to be careful with these things.]]
+(weighted-random~
+~ 10 ~ Unfortunately, you just can't seem to find any. >>oak
+~ 30 ~ You spot a colony of ragged white shelves with dark undersides growing in stacks on the bark of a fallen oak. There are plenty of them, but they seem difficult to dislodge. Do you try to collect them? [[yes|oak|(inv.plus smoky-polypore)You peel off the flat layers in rough strips, leaving much of the fungus attached to the bark. The strips seem tough and leathery.]] / [[no|oak|You leave the rows of fungus alone, looking for something easier to gather.]]
+~ 30 ~ You see a frilly flat colony growing on an old stump, with pretty stripes and white multi-lobed edges. Several layers overlap each other and the mushroom looks rather tough. Do you collect it? [[yes|oak|(inv.plus turkey-tail)You rip layers of the colorful fungus from the bark, gripping its velvety surface.]] / [[no|oak|You leave the frills alone, estimating they'd be more useful for decorating than cooking.]]
+~ 20 ~ You notice a few round creamy-yellow trumpet-shaped mushrooms sprouting from a dead trunk nearby. Inspecting them closely, you see a beautiful honeycomb of white gills underneath their fuzzy caps. Do you pick them? [[yes|oak|(inv.plus diamond-polypore)You pry the mushrooms from the dead wood, feeling their spongy texture.]] / [[no|oak|You leave the mushrooms on the dead tree, reluctant to disturb their beauty.]]
+~ 10 ~ You bend over to peek at the back side of a fallen maple trunk and see a shaggy-looking bunch white stems growing out of the dead wood. The mushroom doesn't have a cap or stem, but it is certainly some kind of fungal growth. Do you pick it? [[yes|oak|(inv.plus bears-head-tooth)You pluck the feathery mass and stuff it into your pocket. Who knows, it might be delicious.]] / [[no|oak|Always good to be careful with these things.]]
 )
 
 >>oak
@@ -153,11 +153,11 @@ You search the fallen logs, ignoring scaly lichens and fuzzy mosses in your hunt
 
 # lost
 
-(set: worry : 1)
+(set~ worry ~ 1)
 
-(if:
-: (context-count:) > 0:
-  You head towards the (plural: (context:1)), but (at-random: a rocky outcropping : a steep streambed : a dense thicket) forces you to detour and suddenly you realize that you're not quite sure where the trail is any more.
+(if~
+~ (context-count~) > 0 ~
+  You head towards the (plural~ (context~1)), but (at-random~ a rocky outcropping ~ a steep streambed ~ a dense thicket) forces you to detour and suddenly you realize that you're not quite sure where the trail is any more.
 )
 
 You have become lost.
@@ -166,32 +166,32 @@ You have become lost.
 
 # head-back
 
-If you're done searching, you can head back toward the [[trail|(check-lost:
-trail)]](if: 
-: lost < 3:.
-: lost < 6:, but you're not 100% sure where it was.
-: lost < 10:, but you're starting to wonder whether you remember where it was.
-: else:, but you realize that you can't remember what direction you came from at all.
+If you're done searching, you can head back toward the [[trail|(check-lost~
+trail)]](if~ 
+~ lost < 3 ~.
+~ lost < 6 ~, but you're not 100% sure where it was.
+~ lost < 10 ~, but you're starting to wonder whether you remember where it was.
+~ else ~, but you realize that you can't remember what direction you came from at all.
 )
 
 # check-lost
 `` Function for checking whether you get lost when following a link.
 `` Takes one argument: the intended destination node.
 
-(set: _dest : (context:1) )
+(set~ _dest ~ (context~1) )
 
-(if:
-: lost = 0: (val: _dest)
-: lost < 4: (chance: lost * 5 : lost&(val: _dest) : (val: _dest) )
-: lost < 10: (chance: lost * 10 : lost&(val: _dest) : (val: _dest) )
-: else: lost&(val: _dest)
+(if~
+~ lost = 0 ~ (val~ _dest)
+~ lost < 4 ~ (chance~ lost * 5 ~ lost&(val~ _dest) ~ (val~ _dest) )
+~ lost < 10 ~ (chance~ lost * 10 ~ lost&(val~ _dest) ~ (val~ _dest) )
+~ else ~ lost&(val ~ _dest)
 )
 
 # plural ``TODO: A general built-in implementation.
 
-(if:
-: (context:1) = pine: pines
-: (context:1) = birch: birches
-: (context:1) = oak: oaks
-: else: ???
+(if~
+~ (context~1) = pine ~ pines
+~ (context~1) = birch ~ birches
+~ (context~1) = oak ~ oaks
+~ else ~ ???
 )

@@ -13,7 +13,7 @@ import utils
 
 import ops
 
-MACRO_START = re.compile(r"\([a-zA-Z_][a-zA-Z_0-9.]+\):")
+MACRO_START = re.compile(r"\(([a-zA-Z_][a-zA-Z_0-9.]+)~")
 
 INT_CONSTANT = re.compile(r"([+-])?(0[xo])?([0-9A-Fa-f])+")
 
@@ -31,6 +31,67 @@ def mb(f):
     fn = fn[:-1]
   BUILTINS[fn] = f
   return f
+
+def split_macro_args(content):
+  """
+  Splits macro content into different arguments, respecting quoted strings and
+  interior macro calls.
+  """
+  # TODO: Enable escaped tildes!
+
+  # First, find quoted regions:
+  qrs = list(utils.find_quoted_regions(content, qc='`').keys())
+
+  # Next, find macro calls:
+  mrs = []
+  i = 0
+  while i < len(content):
+    # Look for a macro-start:
+    m = MACRO_START.search(content, i)
+    if m:
+      r = utils.find_region(qrs, m.start())
+      if r:
+        i = r[1]+1 # skip to end of quoted region
+        continue
+
+      # Otherwise this 
+      try:
+        mend = utils.matching_brace(content, m.start(), qc='`')
+        mrs.append((m.start(), mend))
+        i = mend + 1
+      except utils.UnmatchedError:
+        # malformed macro: skip to the end of the macro start
+        i = m.end() + 1
+    else:
+      # No more macros found
+      break
+
+  # Combine macro- and quote-excluded regions:
+  exrs = sorted(qrs + mrs)
+
+  # Finally, find non-excluded delimiters:
+  result = []
+  i = 0
+  while i < len(content):
+    # Compute first-non-excluded-delimiter index:
+    try:
+      di = content.index('~', i)
+    except ValueError:
+      di = len(content)
+
+    for exr in exrs:
+      if di >= len(content):
+        break
+      if exr[0] <= di and exr[1]>= di:
+        try:
+          di = content.index('~', exr[1]+1)
+        except ValueError:
+          di = len(content)
+
+    result.append(content[i:di])
+    i = di + 1
+
+  return result
 
 def to_string(value):
   """
@@ -50,7 +111,7 @@ def lex_expr(expr):
     c = expr[i]
 
     # Check for end-of-word with accumulated string value:
-    if c in "()[]+-%&|./*~^=<>!\"'" and sval != None:
+    if c in "()[]+-%&|./*^=<>!\"'" and sval != None:
       units.append(("word", sval))
       sval = None
 
@@ -73,9 +134,9 @@ def lex_expr(expr):
       units.append("index", "open")
     elif c == ']':
       units.append("index", "close")
-    elif c in "+-%&|.":
+    elif c in "+-&|.":
       units.append(("op", c))
-    elif c in "/*~^":
+    elif c in "/*%^":
       if expr[i+1] == c:
         units.append(("op", c+c))
         i += 1
@@ -141,7 +202,7 @@ def lex_expr(expr):
           sval = c
         else:
           sval += c
-    elif c in "\"'":
+    elif c == '`':
       ei, qc = utils.string_literal(expr, i, qc=c)
       units.append(("string", qc))
       i = ei
@@ -185,7 +246,8 @@ class FunctionCall(ParseUnit):
   A value representing a macro invocation.
   """
   def __init__(self, name, args):
-    self.value = value
+    self.name = name
+    self.args = args
 
 def parse_next_val(units):
   """
@@ -232,7 +294,7 @@ def parse_next_val(units):
       raise ParseError("Invalid macro token.")
     macro_name = ms.group(1)
     macro_content = uv[ms.end():]
-    macro_args = utils.split_unquoted(macro_content, delim=':', qc='"')
+    macro_args = split_macro_args(macro_content)
     return FunctionCall(macro_name, macro_args), units[1:]
   elif ut == "op":
     raise ParseError("Unexpected operator (expected value).")
@@ -372,7 +434,7 @@ def parse_units(units, ungrouped=False):
         result["state"] = "need_op"
       except ParseError as e:
         (otyp, op), rest = parse_next_op(rest)
-        if op in ['+', '-', '~', 'not']: # unary operators
+        if op in ['+', '-', 'not']: # unary operators
           result["arity"] = 1
           result["op"] = op
           result["state"] = "need_val"
@@ -395,7 +457,7 @@ def parse_units(units, ungrouped=False):
         # else state stays as need_val
       except ParseError as e:
         op, rest = parse_next_op(rest)
-        if op.op in ['+', '-', '~', 'not']: # stacked unary
+        if op.op in ['+', '-', 'not']: # stacked unary
           nr = {
             "parent": result,
             "state": "need_val",
@@ -451,7 +513,7 @@ def parse_units(units, ungrouped=False):
           result["state"] = "need_val"
 
         # Fix arity/state for special operators:
-        if op.op in ('~', '~~', '.'):
+        if op.op in ('%', '%%', '.'):
           result["arity"] = 3
         elif op.op == '|':
           result["arity"] = 3
@@ -525,7 +587,7 @@ def parse_expr(expr):
 
   Examples:
     ```?
-    parse_expr("'yes'")
+    parse_expr("`yes`")
     ```=
     {
       "state": "complete",
@@ -562,7 +624,7 @@ def parse_expr(expr):
       ]
     }
     ```?
-    parse_expr("'one' or False")
+    parse_expr("`one` or False")
     ```=
     {
       "state": "complete",
@@ -793,7 +855,7 @@ def eval_macro(name, args, story, state, module_finder=None):
     ```?
     eval_macro(
       "if",
-      ["1 - 1", "'nope'", "2 * 0", 'nope', "'a' or False", "'yes'", "else","0"],
+      ["1 - 1", "`nope`", "2 * 0", 'nope', "`a` or False", "`yes`", "else","0"],
       eval( # Fake object with .nodes and .title (without importing story):
         "[exec('class T: pass\\\\nt = T()\\\\nt.nodes = []"
       + "\\\\nt.title=\\\"_\\\"'), "
@@ -897,6 +959,85 @@ def eval_text(text, story, state, context=None, module_finder=None):
 
   The given module_finder function should accept a module name and return a
   Story object for that module, or None if the module can't be found.
+
+  Examples:
+
+    ```?
+    eval_text('''\
+(once~
+ Disclaimer: This is a work of fiction and is not intended to aid in
+ identifying edible mushrooms. NEVER eat a mushroom unless you are absolutely
+ certain it is not poisonous, as many edible species look very similar to
+ poisonous ones, and as a result fatal poisonings occur worldwide every year.
+)
+
+(again~
+  (if~
+  ~ lost = 0 ~ ``no extra text in this case
+  ~ lost < 3 ~ You've found your way back. (set~ lost ~ 0)
+  ~ lost < 6 ~ You've found the trail again. For a moment there, you were worried. (set~ lost ~ 0)
+  ~ else~ Finally, you've found the trail again! Now that you're back, you wonder how you were ever lost. (set~ lost ~ 0)
+  )
+)
+
+You're alone in the crisp autumn forest, surrounded by vermillion leaves and
+the scent of wet earth on a faint trail through the hills.
+
+(once~ You're here for mushrooms, and after a few days of rain, you don't
+expect to be disappointed.
+
+[[Uphill|birch|You hike uphill away from the trail.(add~ lost ~ 1)]] from you, a stand of birch an aspen dominates the hilltop.
+
+At the bottom of the hill, a depression has developed into a small [[bog||You set off downhill away from the trail, losing your vantage point as you descend.(add~ lost ~ 2)]].
+
+Ahead of you, a few [[pines|pine|You walk a short distance to the pines, leaving the trail as it twists away uphill.(add~ lost ~ 1)]] proudly retain their needles.
+
+Of course, you could just start searching among the oaks and maples right [[here|oak|You wander a short distance from the trail.(add~ lost ~ 1)]]
+)
+
+(again~
+  (if~
+  ~ (inv.count~ "#mushroom") = 0 ~
+    It's a shame you didn't find anything, but hunting is always a matter of
+    luck.
+  ~ (inv.count~ "#mushroom") < 4 ~
+    You've collected a few specimens, but you wish you'd had time to look for
+    more.
+  ~ else ~
+    You've got plenty of mushrooms to sort out when you get back.
+  )
+  In any case, the sun is starting to dip towards the opposite hill, and you've got ground to cover before you're out of these woods. It's time to go [[home]].
+)
+''',
+eval( # Fake object with .nodes and .title (without importing story)~
+  "[exec('class T: pass\\\\nt = T()\\\\nt.nodes = []"
++ "\\\\nt.title=\\\"_\\\"'), "
++ "eval('t')][1]"
+),
+{"_first": True, "lost": 0}
+)[0]
+    ```=
+'''\
+Disclaimer: This is a work of fiction and is not intended to aid in
+identifying edible mushrooms. NEVER eat a mushroom unless you are absolutely
+certain it is not poisonous, as many edible species look very similar to
+poisonous ones, and as a result fatal poisonings occur worldwide every year.
+
+You're alone in the crisp autumn forest, surrounded by vermillion leaves and
+the scent of wet earth on a faint trail through the hills.
+
+You're here for mushrooms, and after a few days of rain, you don't
+expect to be disappointed.
+
+[Uphill] from you, a stand of birch an aspen dominates the hilltop.
+
+At the bottom of the hill, a depression has developed into a small [bog].
+
+Ahead of you, a few [pines] proudly retain their needles.
+
+Of course, you could just start searching among the oaks and maples right [here]
+'''
+    ```
   """
   context = context or []
 
@@ -951,7 +1092,7 @@ def eval_text(text, story, state, context=None, module_finder=None):
       # eval macro:
       macro_name = ms.group(1)
       macro_content = text[ms.end():end]
-      macro_args = utils.split_unquoted(macro_content, delim=':', qc='"')
+      macro_args = split_macro_args(macro_content)
 
       mv, state = eval_macro(macro_name, macro_args, story, state,module_finder)
       bits.append(to_string(mv))
@@ -990,6 +1131,28 @@ def pt_string(parse_tree, indent=0):
 # -------------------------
 
 @mb
+def set_(mf, story, state, var, expr):
+  """
+  The 'set' macro builtin. Modifies a state variable, and returns the computed
+  value.
+  """
+  # TODO: Eval var as text?
+  val, state = eval_expr(expr, story, state, mf)
+  state[var.strip()] = val
+  return val, state
+
+@mb
+def add(mf, story, state, var, expr):
+  """
+  The 'set' macro builtin. Modifies a state variable, and returns the computed
+  offset value.
+  """
+  # TODO: Eval var as text?
+  val, state = eval_expr(expr, story, state, mf)
+  state[var.strip()] += val
+  return val, state
+
+@mb
 def eval_(mf, story, state, *args):
   """
   The 'eval' macro builtin. Evaluates each argument as an expression, returning
@@ -1002,7 +1165,7 @@ def eval_(mf, story, state, *args):
     for arg in args:
       val, state = eval_expr(arg, story, state, mf)
       result.append(val)
-    return ("list", result), state
+    return result, state
 
 @mb
 def text(mf, story, state, *args):
@@ -1017,7 +1180,7 @@ def text(mf, story, state, *args):
     for arg in args:
       val, state = eval_text(arg, story, state, mf)
       results.append(val)
-    return ("string", ''.join(results)), state
+    return ''.join(results), state
 
 # TODO: Catch exceptions generated w/ # of arguments
 @mb
